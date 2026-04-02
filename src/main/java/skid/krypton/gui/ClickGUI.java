@@ -26,24 +26,19 @@ public final class ClickGUI extends Screen {
     private long lastFrame;
 
     // Radix-inspired color scheme - Dark Navy / Charcoal with Electric Blue & Violet accents
-    private static final Color DARK_NAVY = new Color(15, 20, 30, 255);      // Deep navy base
-    private static final Color CHARCOAL = new Color(25, 28, 35, 255);        // Charcoal panels
-    private static final Color SURFACE = new Color(30, 35, 45, 255);          // Surface elements
-    private static final Color ELEVATED = new Color(38, 42, 55, 255);         // Elevated surfaces
-    private static final Color ELECTRIC_BLUE = new Color(0, 150, 255, 255);   // Electric blue accent
-    private static final Color VIOLET = new Color(138, 43, 226, 255);         // Violet accent
-    private static final Color GLOW_BLUE = new Color(0, 150, 255, 80);        // Glow effect
-    private static final Color GLOW_VIOLET = new Color(138, 43, 226, 60);     // Violet glow
-    private static final Color TEXT_PRIMARY = new Color(245, 245, 255, 255);  // Primary text
-    private static final Color TEXT_SECONDARY = new Color(160, 170, 190, 255); // Secondary text
-    private static final Color TEXT_MUTED = new Color(100, 110, 130, 255);    // Muted text
-    private static final Color BORDER = new Color(45, 52, 68, 255);            // Border color
-    private static final Color HOVER = new Color(45, 55, 75, 255);             // Hover state
-    private static final Color SUCCESS = new Color(0, 200, 100, 255);          // Success green
-    
-    // Gradients
-    private static final Color[] ACCENT_GRADIENT = {ELECTRIC_BLUE, VIOLET};
-    private static final Color[] HEADER_GRADIENT = {new Color(20, 25, 38, 255), new Color(25, 30, 45, 255)};
+    private static final Color DARK_NAVY = new Color(15, 20, 30, 255);
+    private static final Color CHARCOAL = new Color(25, 28, 35, 255);
+    private static final Color SURFACE = new Color(30, 35, 45, 255);
+    private static final Color ELEVATED = new Color(38, 42, 55, 255);
+    private static final Color ELECTRIC_BLUE = new Color(0, 150, 255, 255);
+    private static final Color VIOLET = new Color(138, 43, 226, 255);
+    private static final Color GLOW_BLUE = new Color(0, 150, 255, 40);
+    private static final Color TEXT_PRIMARY = new Color(245, 245, 255, 255);
+    private static final Color TEXT_SECONDARY = new Color(160, 170, 190, 255);
+    private static final Color TEXT_MUTED = new Color(100, 110, 130, 255);
+    private static final Color BORDER = new Color(45, 52, 68, 255);
+    private static final Color HOVER = new Color(45, 55, 75, 255);
+    private static final Color SUCCESS = new Color(0, 200, 100, 255);
     
     // Layout constants
     private static final int SETTINGS_PANEL_WIDTH = 340;
@@ -77,27 +72,9 @@ public final class ClickGUI extends Screen {
         float delta = Math.min(0.05f, (now - lastFrame) / 1000f);
         lastFrame = now;
         
-        // Smooth animation easing
         float target = (Krypton.mc.currentScreen == this) ? 1.0f : 0.0f;
         animationProgress += (target - animationProgress) * delta * 8;
         animationProgress = Math.max(0, Math.min(1, animationProgress));
-    }
-
-    private void drawGradientRect(DrawContext context, int x1, int y1, int x2, int y2, Color[] colors, boolean horizontal) {
-        for (int i = 0; i < (horizontal ? (x2 - x1) : (y2 - y1)); i++) {
-            float ratio = (float) i / (horizontal ? (x2 - x1) : (y2 - y1));
-            Color c1 = colors[0];
-            Color c2 = colors[1];
-            int r = (int) (c1.getRed() + (c2.getRed() - c1.getRed()) * ratio);
-            int g = (int) (c1.getGreen() + (c2.getGreen() - c1.getGreen()) * ratio);
-            int b = (int) (c1.getBlue() + (c2.getBlue() - c1.getBlue()) * ratio);
-            
-            if (horizontal) {
-                context.fill(x1 + i, y1, x1 + i + 1, y2, new Color(r, g, b, 255).getRGB());
-            } else {
-                context.fill(x1, y1 + i, x2, y1 + i + 1, new Color(r, g, b, 255).getRGB());
-            }
-        }
     }
 
     public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
@@ -108,7 +85,7 @@ public final class ClickGUI extends Screen {
                 Krypton.INSTANCE.screen.render(drawContext, 0, 0, delta);
             }
             
-            // Background with fade animation
+            // Background with fade
             int bgAlpha = (int) (180 * animationProgress);
             drawContext.fill(0, 0, Krypton.mc.getWindow().getWidth(), Krypton.mc.getWindow().getHeight(), 
                 new Color(0, 0, 0, bgAlpha).getRGB());
@@ -117,8 +94,8 @@ public final class ClickGUI extends Screen {
             int scaledMouseX = mouseX * (int) MinecraftClient.getInstance().getWindow().getScaleFactor();
             int scaledMouseY = mouseY * (int) MinecraftClient.getInstance().getWindow().getScaleFactor();
             
-            // Apply scale animation
-            float scale = 0.9f + (animationProgress * 0.1f);
+            // Scale animation
+            float scale = 0.92f + (animationProgress * 0.08f);
             drawContext.getMatrices().push();
             drawContext.getMatrices().translate(Krypton.mc.getWindow().getWidth() / 2f, Krypton.mc.getWindow().getHeight() / 2f, 0);
             drawContext.getMatrices().scale(scale, scale, 1);
@@ -146,13 +123,19 @@ public final class ClickGUI extends Screen {
         int endY = startY + TOTAL_HEIGHT + 20;
         
         // Outer glow
-        RenderUtils.renderRoundedQuad(drawContext.getMatrices(), GLOW_BLUE, startX, startY, endX, endY, CORNER_RADIUS + 4, CORNER_RADIUS + 4, CORNER_RADIUS + 4, CORNER_RADIUS + 4, 30);
+        RenderUtils.renderRoundedQuad(drawContext.getMatrices(), GLOW_BLUE, startX, startY, endX, endY, CORNER_RADIUS + 4, CORNER_RADIUS + 4, CORNER_RADIUS + 4, CORNER_RADIUS + 4, 50);
         
-        // Background panel
+        // Main background
         RenderUtils.renderRoundedQuad(drawContext.getMatrices(), DARK_NAVY, 
             (screenWidth - TOTAL_WIDTH) / 2, (screenHeight - TOTAL_HEIGHT) / 2,
             (screenWidth + TOTAL_WIDTH) / 2, (screenHeight + TOTAL_HEIGHT) / 2,
             CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, 50);
+            
+        // Subtle border
+        RenderUtils.renderRoundedOutline(drawContext, BORDER,
+            (screenWidth - TOTAL_WIDTH) / 2, (screenHeight - TOTAL_HEIGHT) / 2,
+            (screenWidth + TOTAL_WIDTH) / 2, (screenHeight + TOTAL_HEIGHT) / 2,
+            CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, 1.5, 1.5);
     }
 
     private void renderSettingsPanel(DrawContext drawContext, int mouseX, int mouseY) {
@@ -163,17 +146,16 @@ public final class ClickGUI extends Screen {
         int endX = startX + SETTINGS_PANEL_WIDTH;
         int endY = startY + TOTAL_HEIGHT;
         
-        // Panel with border
+        // Panel
         RenderUtils.renderRoundedQuad(drawContext.getMatrices(), CHARCOAL, startX, startY, endX, endY, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, 50);
-        RenderUtils.renderRoundedOutline(drawContext.getMatrices(), BORDER, startX, startY, endX, endY, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, 1.5f);
+        RenderUtils.renderRoundedOutline(drawContext, BORDER, startX, startY, endX, endY, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, 1.5, 1.5);
         
-        // Header with gradient
-        RenderUtils.renderRoundedQuad(drawContext.getMatrices(), HEADER_GRADIENT[0], startX, startY, endX, startY + HEADER_HEIGHT, CORNER_RADIUS, CORNER_RADIUS, 0, 0, 50);
+        // Header
+        RenderUtils.renderRoundedQuad(drawContext.getMatrices(), new Color(20, 23, 33, 255), startX, startY, endX, startY + HEADER_HEIGHT, CORNER_RADIUS, CORNER_RADIUS, 0, 0, 50);
         
         if (this.selectedModule != null) {
-            // Module name header
             String headerText = this.selectedModule.getName().toString().toUpperCase();
-            TextRenderer.drawString(headerText, drawContext, startX + PADDING, startY + 22, toMCColor(ELECTRIC_BLUE));
+            TextRenderer.drawString(headerText, drawContext, startX + PADDING, startY + 24, toMCColor(ELECTRIC_BLUE));
             
             // Accent line
             drawContext.fill(startX + PADDING, startY + HEADER_HEIGHT - 2, endX - PADDING, startY + HEADER_HEIGHT - 1, toMCColor(ELECTRIC_BLUE));
@@ -185,15 +167,11 @@ public final class ClickGUI extends Screen {
                     Setting s = (Setting) setting;
                     boolean isHovered = isHoveredInRect(mouseX, mouseY, startX, yOffset, SETTINGS_PANEL_WIDTH, ITEM_HEIGHT);
                     
-                    // Setting item background
                     if (isHovered && !this.draggingSlider) {
                         RenderUtils.renderRoundedQuad(drawContext.getMatrices(), HOVER, startX + 8, yOffset, endX - 8, yOffset + ITEM_HEIGHT, 8, 8, 8, 8, 30);
                     }
                     
-                    // Setting name
                     TextRenderer.drawString(s.getName().toString(), drawContext, startX + PADDING, yOffset + 12, toMCColor(TEXT_PRIMARY));
-                    
-                    // Setting value/control
                     this.renderModernSetting(drawContext, setting, startX, endX, yOffset, mouseX, mouseY);
                     
                     yOffset += ITEM_HEIGHT + 6;
@@ -209,9 +187,8 @@ public final class ClickGUI extends Screen {
             BooleanSetting boolSetting = (BooleanSetting) setting;
             boolean value = boolSetting.getValue();
             
-            // Modern toggle switch
             int toggleX = endX - 52;
-            int toggleY = yOffset + 11;
+            int toggleY = yOffset + 10;
             int toggleWidth = 40;
             int toggleHeight = 18;
             
@@ -228,10 +205,8 @@ public final class ClickGUI extends Screen {
             NumberSetting numSetting = (NumberSetting) setting;
             String valueText = String.format("%.2f", numSetting.getValue());
             
-            // Value display
             TextRenderer.drawString(valueText, drawContext, endX - PADDING - TextRenderer.getWidth(valueText), yOffset + 12, toMCColor(ELECTRIC_BLUE));
             
-            // Slider
             int sliderY = yOffset + 28;
             int sliderStartX = startX + PADDING;
             int sliderEndX = endX - PADDING;
@@ -240,11 +215,11 @@ public final class ClickGUI extends Screen {
             // Track
             RenderUtils.renderRoundedQuad(drawContext.getMatrices(), new Color(45, 50, 65, 255), sliderStartX, sliderY, sliderEndX, sliderY + 3, 2, 2, 2, 2, 20);
             
-            // Progress with gradient
+            // Progress
             double progress = (numSetting.getValue() - numSetting.getMin()) / (numSetting.getMax() - numSetting.getMin());
             int progressWidth = (int) (sliderWidth * progress);
             if (progressWidth > 0) {
-                drawGradientRect(drawContext, sliderStartX, sliderY, sliderStartX + progressWidth, sliderY + 3, ACCENT_GRADIENT, true);
+                RenderUtils.renderRoundedQuad(drawContext.getMatrices(), ELECTRIC_BLUE, sliderStartX, sliderY, sliderStartX + progressWidth, sliderY + 3, 2, 2, 2, 2, 20);
             }
             
             // Handle
@@ -255,7 +230,6 @@ public final class ClickGUI extends Screen {
             ModeSetting<?> modeSetting = (ModeSetting<?>) setting;
             String valueText = modeSetting.getValue().toString();
             
-            // Modern dropdown pill
             int pillWidth = Math.max(80, TextRenderer.getWidth(valueText) + 24);
             int pillX = endX - pillWidth - PADDING;
             int pillY = yOffset + 8;
@@ -285,11 +259,11 @@ public final class ClickGUI extends Screen {
         int endY = startY + TOTAL_HEIGHT;
         
         RenderUtils.renderRoundedQuad(drawContext.getMatrices(), CHARCOAL, startX, startY, endX, endY, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, 50);
-        RenderUtils.renderRoundedOutline(drawContext.getMatrices(), BORDER, startX, startY, endX, endY, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, 1.5f);
+        RenderUtils.renderRoundedOutline(drawContext, BORDER, startX, startY, endX, endY, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, 1.5, 1.5);
         
-        // Logo/Header
-        TextRenderer.drawString("KRYPTON+", drawContext, startX + PADDING, startY + 22, toMCColor(ELECTRIC_BLUE));
-        drawContext.fill(startX + PADDING, startY + 42, endX - PADDING, startY + 43, toMCColor(ELECTRIC_BLUE));
+        // Logo
+        TextRenderer.drawString("KRYPTON+", drawContext, startX + PADDING, startY + 24, toMCColor(ELECTRIC_BLUE));
+        drawContext.fill(startX + PADDING, startY + 44, endX - PADDING, startY + 45, toMCColor(ELECTRIC_BLUE));
         
         int yOffset = startY + HEADER_HEIGHT + PADDING;
         
@@ -297,7 +271,6 @@ public final class ClickGUI extends Screen {
             boolean isSelected = category == this.selectedCategory;
             boolean isHovered = isHoveredInRect(mouseX, mouseY, startX, yOffset, CATEGORY_PANEL_WIDTH, ITEM_HEIGHT);
             
-            // Selection indicator
             if (isSelected) {
                 RenderUtils.renderRoundedQuad(drawContext.getMatrices(), new Color(0, 150, 255, 30), startX + 5, yOffset, endX - 5, yOffset + ITEM_HEIGHT, 8, 8, 8, 8, 30);
                 drawContext.fill(startX + 5, yOffset, startX + 7, yOffset + ITEM_HEIGHT, toMCColor(ELECTRIC_BLUE));
@@ -321,10 +294,10 @@ public final class ClickGUI extends Screen {
         int endY = startY + TOTAL_HEIGHT;
         
         RenderUtils.renderRoundedQuad(drawContext.getMatrices(), CHARCOAL, startX, startY, endX, endY, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, 50);
-        RenderUtils.renderRoundedOutline(drawContext.getMatrices(), BORDER, startX, startY, endX, endY, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, 1.5f);
+        RenderUtils.renderRoundedOutline(drawContext, BORDER, startX, startY, endX, endY, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, 1.5, 1.5);
         
         // Category title
-        TextRenderer.drawString(this.selectedCategory.name.toString(), drawContext, startX + PADDING, startY + 22, toMCColor(TEXT_PRIMARY));
+        TextRenderer.drawString(this.selectedCategory.name.toString(), drawContext, startX + PADDING, startY + 24, toMCColor(TEXT_PRIMARY));
         
         // Search bar
         int searchY = startY + HEADER_HEIGHT - 18;
@@ -359,14 +332,12 @@ public final class ClickGUI extends Screen {
             boolean isHovered = isHoveredInRect(mouseX, mouseY, startX, yOffset, MODULE_PANEL_WIDTH, ITEM_HEIGHT);
             boolean isEnabled = module.isEnabled();
             
-            // Module item background
             if (isSelected) {
                 RenderUtils.renderRoundedQuad(drawContext.getMatrices(), new Color(0, 150, 255, 20), startX + 5, yOffset, endX - 5, yOffset + ITEM_HEIGHT, 8, 8, 8, 8, 30);
             } else if (isHovered) {
                 RenderUtils.renderRoundedQuad(drawContext.getMatrices(), HOVER, startX + 5, yOffset, endX - 5, yOffset + ITEM_HEIGHT, 8, 8, 8, 8, 30);
             }
             
-            // Module name with status color
             Color nameColor = isEnabled ? ELECTRIC_BLUE : TEXT_SECONDARY;
             TextRenderer.drawString(module.getName().toString(), drawContext, startX + PADDING, yOffset + 12, toMCColor(nameColor));
             
@@ -377,7 +348,7 @@ public final class ClickGUI extends Screen {
                 indicatorX, indicatorY, indicatorX + 8, indicatorY + 8, 4, 4, 4, 4, 30);
             
             if (isEnabled) {
-                RenderUtils.renderRoundedQuad(drawContext.getMatrices(), new Color(0, 200, 100, 100), 
+                RenderUtils.renderRoundedQuad(drawContext.getMatrices(), new Color(0, 200, 100, 80), 
                     indicatorX - 4, indicatorY - 2, indicatorX + 12, indicatorY + 10, 8, 8, 8, 8, 20);
             }
             
@@ -403,10 +374,10 @@ public final class ClickGUI extends Screen {
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (this.searchFocused) {
-            if (keyCode == 259 && !this.searchQuery.isEmpty()) { // Backspace
+            if (keyCode == 259 && !this.searchQuery.isEmpty()) {
                 this.searchQuery = this.searchQuery.substring(0, this.searchQuery.length() - 1);
                 return true;
-            } else if (keyCode == 256) { // Escape
+            } else if (keyCode == 256) {
                 this.searchFocused = false;
                 return true;
             }
@@ -473,37 +444,71 @@ public final class ClickGUI extends Screen {
             moduleY += ITEM_HEIGHT + 4;
         }
         
-        // Settings panel
+        // Settings panel - Number slider dragging
         if (this.selectedModule != null) {
             int settingsStartX = (screenWidth - TOTAL_WIDTH) / 2;
             int settingsStartY = (screenHeight - TOTAL_HEIGHT) / 2 + HEADER_HEIGHT + PADDING;
             int settingY = settingsStartY;
             
             for (Object setting : this.selectedModule.getSettings()) {
-                if (setting instanceof Setting) {
-                    if (isHoveredInRect((int) scaledMouseX, (int) scaledMouseY, settingsStartX, settingY, SETTINGS_PANEL_WIDTH, ITEM_HEIGHT)) {
-                        handleModernSettingClick(setting, button);
+                if (setting instanceof NumberSetting) {
+                    NumberSetting numSetting = (NumberSetting) setting;
+                    int sliderY = settingY + 28;
+                    int sliderStartX = settingsStartX + PADDING;
+                    int sliderEndX = settingsStartX + SETTINGS_PANEL_WIDTH - PADDING;
+                    
+                    if (isHoveredInRect((int) scaledMouseX, (int) scaledMouseY, sliderStartX, sliderY - 5, sliderEndX - sliderStartX, 14)) {
+                        this.draggingSlider = true;
+                        this.draggingSliderSetting = (Setting) setting;
+                        this.updateSliderValue(numSetting, (int) scaledMouseX, sliderStartX, sliderEndX);
                         return true;
                     }
-                    settingY += ITEM_HEIGHT + 6;
+                } else if (setting instanceof BooleanSetting && isHoveredInRect((int) scaledMouseX, (int) scaledMouseY, settingsStartX, settingY, SETTINGS_PANEL_WIDTH, ITEM_HEIGHT)) {
+                    ((BooleanSetting) setting).toggle();
+                    return true;
+                } else if (setting instanceof ModeSetting && isHoveredInRect((int) scaledMouseX, (int) scaledMouseY, settingsStartX, settingY, SETTINGS_PANEL_WIDTH, ITEM_HEIGHT)) {
+                    ModeSetting<?> modeSetting = (ModeSetting<?>) setting;
+                    if (button == 0) {
+                        modeSetting.cycleUp();
+                    } else if (button == 1) {
+                        modeSetting.cycleDown();
+                    }
+                    return true;
                 }
+                settingY += ITEM_HEIGHT + 6;
             }
         }
         
         return super.mouseClicked(scaledMouseX, scaledMouseY, button);
     }
     
-    private void handleModernSettingClick(Object setting, int button) {
-        if (setting instanceof BooleanSetting) {
-            ((BooleanSetting) setting).toggle();
-        } else if (setting instanceof ModeSetting) {
-            ModeSetting<?> modeSetting = (ModeSetting<?>) setting;
-            if (button == 0) {
-                modeSetting.cycleUp();
-            } else if (button == 1) {
-                modeSetting.cycleDown();
-            }
+    private void updateSliderValue(NumberSetting setting, int mouseX, int sliderStartX, int sliderEndX) {
+        double progress = Math.max(0.0, Math.min(1.0, (double) (mouseX - sliderStartX) / (sliderEndX - sliderStartX)));
+        double newValue = setting.getMin() + progress * (setting.getMax() - setting.getMin());
+        setting.getValue(MathUtil.roundToNearest(newValue, setting.getFormat()));
+    }
+
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+        if (this.draggingSlider && this.draggingSliderSetting instanceof NumberSetting) {
+            double scaledMouseX = mouseX * MinecraftClient.getInstance().getWindow().getScaleFactor();
+            int screenWidth = Krypton.mc.getWindow().getWidth();
+            int settingsStartX = (screenWidth - TOTAL_WIDTH) / 2;
+            int sliderStartX = settingsStartX + PADDING;
+            int sliderEndX = settingsStartX + SETTINGS_PANEL_WIDTH - PADDING;
+            
+            this.updateSliderValue((NumberSetting) this.draggingSliderSetting, (int) scaledMouseX, sliderStartX, sliderEndX);
+            return true;
         }
+        return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+    }
+
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (this.draggingSlider) {
+            this.draggingSlider = false;
+            this.draggingSliderSetting = null;
+            return true;
+        }
+        return super.mouseReleased(mouseX, mouseY, button);
     }
 
     public boolean shouldPause() {
