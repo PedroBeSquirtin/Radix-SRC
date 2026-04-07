@@ -5,9 +5,7 @@ import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.render.*;
 import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
 import skid.krypton.event.EventListener;
@@ -52,8 +50,6 @@ public final class BlockEntityNameTags extends Module {
     private final NumberSetting spawnerRed = new NumberSetting(EncryptedString.of("Spawner Red"), 0, 255, 255, 1);
     private final NumberSetting spawnerGreen = new NumberSetting(EncryptedString.of("Spawner Green"), 0, 255, 0, 1);
     private final NumberSetting spawnerBlue = new NumberSetting(EncryptedString.of("Spawner Blue"), 0, 255, 0, 1);
-    
-    private final Map<BlockPos, Long> renderTimes = new HashMap<>();
     
     public BlockEntityNameTags() {
         super(EncryptedString.of("BlockEntity NameTags"), EncryptedString.of("Shows nametags and ESP for block entities"), -1, Category.RENDER);
@@ -154,8 +150,10 @@ public final class BlockEntityNameTags extends Module {
         Vec3d cameraPos = camera.getPos();
         double maxDistSq = maxDistance.getValue() * maxDistance.getValue();
         
-        // Get all block entities from the world
-        for (BlockEntity blockEntity : mc.world.blockEntities.values()) {
+        // Get all loaded block entities - using the correct method
+        var blockEntities = mc.world.getBlockEntities();
+        
+        for (BlockEntity blockEntity : blockEntities.values()) {
             BlockPos pos = blockEntity.getPos();
             Vec3d blockPos = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
             double distanceSq = cameraPos.squaredDistanceTo(blockPos);
