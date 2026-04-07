@@ -10,7 +10,6 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
-import org.lwjgl.opengl.GL11;
 import skid.krypton.event.EventListener;
 import skid.krypton.event.events.Render3DEvent;
 import skid.krypton.module.Category;
@@ -18,7 +17,6 @@ import skid.krypton.module.Module;
 import skid.krypton.module.setting.BooleanSetting;
 import skid.krypton.module.setting.NumberSetting;
 import skid.krypton.utils.EncryptedString;
-import skid.krypton.utils.RenderUtils;
 
 import java.awt.*;
 import java.util.HashMap;
@@ -72,11 +70,11 @@ public final class BlockEntityNameTags extends Module {
     private Color getESPColor(BlockEntity blockEntity) {
         if (blockEntity instanceof ChestBlockEntity || blockEntity instanceof TrappedChestBlockEntity) {
             return new Color((int) chestRed.getValue(), (int) chestGreen.getValue(), (int) chestBlue.getValue(), 100);
-        } else if (blockEntity instanceof SpawnerBlockEntity) {
+        } else if (blockEntity instanceof MobSpawnerBlockEntity) {
             return new Color((int) spawnerRed.getValue(), (int) spawnerGreen.getValue(), (int) spawnerBlue.getValue(), 100);
         } else if (blockEntity instanceof ShulkerBoxBlockEntity) {
             return new Color(200, 100, 255, 100);
-        } else if (blockEntity instanceof FurnaceBlockEntity) {
+        } else if (blockEntity instanceof AbstractFurnaceBlockEntity) {
             return new Color(128, 128, 128, 100);
         } else if (blockEntity instanceof HopperBlockEntity) {
             return new Color(100, 100, 100, 100);
@@ -99,7 +97,7 @@ public final class BlockEntityNameTags extends Module {
             return "Trapped Chest";
         } else if (blockEntity instanceof ShulkerBoxBlockEntity) {
             return "Shulker Box";
-        } else if (blockEntity instanceof FurnaceBlockEntity) {
+        } else if (blockEntity instanceof AbstractFurnaceBlockEntity) {
             return "Furnace";
         } else if (blockEntity instanceof HopperBlockEntity) {
             return "Hopper";
@@ -109,14 +107,8 @@ public final class BlockEntityNameTags extends Module {
             return "Dispenser";
         } else if (blockEntity instanceof BarrelBlockEntity) {
             return "Barrel";
-        } else if (blockEntity instanceof SpawnerBlockEntity) {
-            SpawnerBlockEntity spawner = (SpawnerBlockEntity) blockEntity;
-            try {
-                String entityType = spawner.getLogic().getRenderedEntity().getDefaultName().getString();
-                return "Spawner: " + entityType;
-            } catch (Exception e) {
-                return "Spawner";
-            }
+        } else if (blockEntity instanceof MobSpawnerBlockEntity) {
+            return "Spawner";
         } else if (blockEntity instanceof BeaconBlockEntity) {
             return "Beacon";
         } else if (blockEntity instanceof BrewingStandBlockEntity) {
@@ -132,7 +124,7 @@ public final class BlockEntityNameTags extends Module {
             return chestESP.getValue();
         } else if (blockEntity instanceof ShulkerBoxBlockEntity) {
             return shulkerESP.getValue();
-        } else if (blockEntity instanceof FurnaceBlockEntity) {
+        } else if (blockEntity instanceof AbstractFurnaceBlockEntity) {
             return furnaceESP.getValue();
         } else if (blockEntity instanceof HopperBlockEntity) {
             return hopperESP.getValue();
@@ -142,7 +134,7 @@ public final class BlockEntityNameTags extends Module {
             return dispenserESP.getValue();
         } else if (blockEntity instanceof BarrelBlockEntity) {
             return barrelESP.getValue();
-        } else if (blockEntity instanceof SpawnerBlockEntity) {
+        } else if (blockEntity instanceof MobSpawnerBlockEntity) {
             return spawnerESP.getValue();
         } else if (blockEntity instanceof BeaconBlockEntity) {
             return beaconESP.getValue();
@@ -162,11 +154,8 @@ public final class BlockEntityNameTags extends Module {
         Vec3d cameraPos = camera.getPos();
         double maxDistSq = maxDistance.getValue() * maxDistance.getValue();
         
-        // Remove old render times
-        long currentTime = System.currentTimeMillis();
-        renderTimes.entrySet().removeIf(entry -> currentTime - entry.getValue() > 1000);
-        
-        for (BlockEntity blockEntity : mc.world.blockEntities) {
+        // Get all block entities from the world
+        for (BlockEntity blockEntity : mc.world.blockEntities.values()) {
             BlockPos pos = blockEntity.getPos();
             Vec3d blockPos = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
             double distanceSq = cameraPos.squaredDistanceTo(blockPos);
@@ -175,14 +164,14 @@ public final class BlockEntityNameTags extends Module {
             if (!shouldRender(blockEntity)) continue;
             
             // Render ESP outline
-            renderESPOutline(event.matrixStack, blockEntity, blockPos, cameraPos, distanceSq);
+            renderESPOutline(event.matrixStack, blockEntity, blockPos, cameraPos);
             
             // Render nametag
-            renderNameTag(event.matrixStack, blockEntity, blockPos, cameraPos, distanceSq);
+            renderNameTag(event.matrixStack, blockEntity, blockPos, cameraPos);
         }
     }
     
-    private void renderESPOutline(MatrixStack matrixStack, BlockEntity blockEntity, Vec3d blockPos, Vec3d cameraPos, double distanceSq) {
+    private void renderESPOutline(MatrixStack matrixStack, BlockEntity blockEntity, Vec3d blockPos, Vec3d cameraPos) {
         matrixStack.push();
         
         double x = blockPos.x - cameraPos.x;
@@ -197,15 +186,10 @@ public final class BlockEntityNameTags extends Module {
         float g = espColor.getGreen() / 255f;
         float b = espColor.getBlue() / 255f;
         
-        // Render box around block entity
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.disableDepthTest();
-        
         Tessellator tessellator = Tessellator.getInstance();
         BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
         
-        float size = 0.5f;
+        float size = 0.55f;
         
         // Draw outline box
         // Bottom square
@@ -249,17 +233,14 @@ public final class BlockEntityNameTags extends Module {
         
         BufferRenderer.drawWithGlobalProgram(buffer.end());
         
-        RenderSystem.enableDepthTest();
-        RenderSystem.disableBlend();
-        
         matrixStack.pop();
     }
     
-    private void renderNameTag(MatrixStack matrixStack, BlockEntity blockEntity, Vec3d blockPos, Vec3d cameraPos, double distanceSq) {
+    private void renderNameTag(MatrixStack matrixStack, BlockEntity blockEntity, Vec3d blockPos, Vec3d cameraPos) {
         matrixStack.push();
         
         double x = blockPos.x - cameraPos.x;
-        double y = blockPos.y - cameraPos.y + 0.8;
+        double y = blockPos.y - cameraPos.y + 0.9;
         double z = blockPos.z - cameraPos.z;
         
         matrixStack.translate(x, y, z);
@@ -270,7 +251,7 @@ public final class BlockEntityNameTags extends Module {
         matrixStack.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-yaw));
         matrixStack.multiply(RotationAxis.POSITIVE_X.rotationDegrees(pitch));
         
-        float scale = (float) (textScale.getValue() * (1.0 - Math.min(0.5, distanceSq / (maxDistance.getValue() * maxDistance.getValue()) * 0.5)));
+        float scale = (float) textScale.getValue();
         matrixStack.scale(scale, scale, scale);
         
         String name = getBlockEntityName(blockEntity);
@@ -279,16 +260,11 @@ public final class BlockEntityNameTags extends Module {
         int textHeight = textRenderer.fontHeight;
         
         // Draw background
-        int alpha = backgroundAlpha.getValue().intValue();
+        int alpha = (int) backgroundAlpha.getValue();
         Color bgColor = new Color(0, 0, 0, alpha);
         Color textColor = getTextColor();
         
         DrawContext drawContext = new DrawContext(mc, mc.getBufferBuilders().getEntityVertexConsumers());
-        
-        // Use immediate rendering for nametag
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.disableDepthTest();
         
         // Background
         Tessellator tessellator = Tessellator.getInstance();
@@ -307,9 +283,6 @@ public final class BlockEntityNameTags extends Module {
         
         // Draw text
         drawContext.drawText(textRenderer, name, (int)(-textWidth / 2f), -textHeight, textColor.getRGB(), true);
-        
-        RenderSystem.enableDepthTest();
-        RenderSystem.disableBlend();
         
         matrixStack.pop();
     }
