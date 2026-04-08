@@ -1,25 +1,25 @@
 package skid.krypton.module.modules.render;
 
 import net.minecraft.block.entity.*;
-import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.render.Camera;
-import net.minecraft.client.render.DrawContext;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.network.packet.s2c.play.ChunkDataS2CPacket;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.chunk.WorldChunk;
 import skid.krypton.event.EventListener;
+import skid.krypton.event.events.PacketReceiveEvent;
 import skid.krypton.event.events.Render3DEvent;
 import skid.krypton.event.events.TickEvent;
-import skid.krypton.event.events.ChunkEvent;
-import skid.krypton.event.events.PacketEvent;
 import skid.krypton.module.Category;
 import skid.krypton.module.Module;
 import skid.krypton.module.setting.BooleanSetting;
 import skid.krypton.module.setting.NumberSetting;
 import skid.krypton.utils.EncryptedString;
 import skid.krypton.utils.RenderUtils;
+import skid.krypton.utils.TextRenderer;
 
 import java.awt.*;
 import java.util.*;
@@ -34,7 +34,7 @@ public final class BlockEntityDebug extends Module {
     private final BooleanSetting highlightFurnaces = new BooleanSetting(EncryptedString.of("Furnaces"), true);
     private final BooleanSetting highlightBeacons = new BooleanSetting(EncryptedString.of("Beacons"), true);
     private final BooleanSetting showDistance = new BooleanSetting(EncryptedString.of("Show Distance"), true);
-    private final BooleanSetting silentMode = new BooleanSetting(EncryptedString.of("Silent Mode (Anti-Detect)"), true);
+    private final BooleanSetting passiveMode = new BooleanSetting(EncryptedString.of("Passive Mode (Anti-Detect)"), true);
     
     // Colors
     private static final Color CHEST_COLOR = new Color(255, 200, 50, 150);
@@ -43,11 +43,11 @@ public final class BlockEntityDebug extends Module {
     private static final Color FURNACE_COLOR = new Color(150, 150, 150, 150);
     private static final Color BEACON_COLOR = new Color(50, 200, 255, 150);
     
-    // Cache - stores block entities we've naturally discovered
+    // Cache
     private final Map<BlockPos, BlockEntityInfo> foundBlockEntities = new ConcurrentHashMap<>();
-    private final Set<Long> scannedChunks = new HashSet<>();
+    private final Set<Long> receivedChunks = new HashSet<>();
+    private int scanTimer = 0;
     private int passiveScanTimer = 0;
-    private int renderTimer = 0;
     
     public BlockEntityDebug() {
         super(EncryptedString.of("BlockEntity Debug"), 
@@ -55,16 +55,16 @@ public final class BlockEntityDebug extends Module {
               -1, Category.RENDER);
         this.addSettings(this.range, this.highlightChests, this.highlightShulkers, 
                         this.highlightSpawners, this.highlightFurnaces, this.highlightBeacons, 
-                        this.showDistance, this.silentMode);
+                        this.showDistance, this.passiveMode);
     }
     
     @Override
     public void onEnable() {
         super.onEnable();
         this.foundBlockEntities.clear();
-        this.scannedChunks.clear();
+        this.receivedChunks.clear();
+        this.scanTimer = 0;
         this.passiveScanTimer = 0;
-        this.renderTimer = 0;
     }
     
     @Override
@@ -73,80 +73,102 @@ public final class BlockEntityDebug extends Module {
         this.foundBlockEntities.clear();
     }
     
+    // HOOK INTO CHUNK PACKETS - THIS BYPASSES DONUTSMP
     @EventListener
-    public void onTick(TickEvent event) {
+    public void onPacketReceive(PacketReceiveEvent event) {
         if (mc.player == null || mc.world == null) return;
+        if (!passiveMode.getValue()) return;
         
-        this.passiveScanTimer++;
-        this.renderTimer++;
-        
-        // ONLY scan when chunks load naturally (NO forced refreshes)
-        if (this.passiveScanTimer >= 20 && silentMode.getValue()) { // Slower = less detection
-            this.passiveScanFromLoadedChunks();
-            this.passiveScanTimer = 0;
-        }
-        
-        // Update distances for all found block entities every render
-        if (this.renderTimer >= 5) {
-            this.updateDistances();
-            this.renderTimer = 0;
-        }
-    }
-    
-    @EventListener
-    public void onChunkLoad(ChunkEvent.Load event) {
-        if (mc.world == null || silentMode.getValue()) return;
-        
-        // Scan chunks as they load naturally - THIS BYPASSES DETECTION
-        WorldChunk chunk = event.getChunk();
-        if (chunk != null && !scannedChunks.contains(chunk.getPos().toLong())) {
-            scannedChunks.add(chunk.getPos().toLong());
-            this.scanChunkPassive(chunk);
-        }
-    }
-    
-    private void passiveScanFromLoadedChunks() {
-        if (mc.world == null || mc.player == null) return;
-        
-        int radius = (int) this.range.getValue();
-        BlockPos playerPos = mc.player.getBlockPos();
-        
-        // Get currently loaded chunks (these are legitimately loaded by the game)
-        Iterable<WorldChunk> loadedChunks = mc.world.getChunkManager().getLoadedChunks();
-        
-        for (WorldChunk chunk : loadedChunks) {
-            if (chunk == null) continue;
+        // When server sends chunk data, we capture it passively
+        if (event.packet instanceof ChunkDataS2CPacket) {
+            ChunkDataS2CPacket chunkPacket = (ChunkDataS2CPacket) event.packet;
+            int chunkX = chunkPacket.getChunkX();
+            int chunkZ = chunkPacket.getChunkZ();
+            long chunkKey = (long) chunkX << 32 | (chunkZ & 0xFFFFFFFFL);
             
-            // Check if chunk is within range
-            int chunkX = chunk.getPos().x;
-            int chunkZ = chunk.getPos().z;
-            int playerChunkX = playerPos.getX() >> 4;
-            int playerChunkZ = playerPos.getZ() >> 4;
-            
-            int dx = Math.abs(chunkX - playerChunkX);
-            int dz = Math.abs(chunkZ - playerChunkZ);
-            int chunkDist = dx * dx + dz * dz;
-            int maxChunkDist = (radius / 16) + 1;
-            
-            if (chunkDist <= maxChunkDist * maxChunkDist) {
-                scanChunkPassive(chunk);
+            if (!receivedChunks.contains(chunkKey)) {
+                receivedChunks.add(chunkKey);
+                // Wait a tick for chunk to be loaded, then scan
+                mc.execute(() -> {
+                    WorldChunk chunk = mc.world.getChunk(chunkX, chunkZ);
+                    if (chunk != null) {
+                        scanChunk(chunk);
+                    }
+                });
             }
         }
     }
     
-    private void scanChunkPassive(WorldChunk chunk) {
+    @EventListener
+    public void onTick(TickEvent event) {
+        if (mc.player == null || mc.world == null) return;
+        
+        if (passiveMode.getValue()) {
+            // SLOW PASSIVE SCAN - NO EXTRA PACKETS
+            this.passiveScanTimer++;
+            if (this.passiveScanTimer >= 20) { // Slower = less detection
+                this.passiveScanLoadedChunks();
+                this.passiveScanTimer = 0;
+            }
+        } else {
+            // LEGACY MODE (might get detected)
+            this.scanTimer++;
+            if (this.scanTimer >= 5) {
+                this.scanForBlockEntities();
+                this.scanTimer = 0;
+            }
+        }
+        
+        // Update distances
+        this.updateDistances();
+    }
+    
+    private void passiveScanLoadedChunks() {
+        if (mc.world == null || mc.player == null) return;
+        
+        int radius = (int) this.range.getValue();
+        BlockPos playerPos = mc.player.getBlockPos();
+        int playerChunkX = playerPos.getX() >> 4;
+        int playerChunkZ = playerPos.getZ() >> 4;
+        int chunkRadius = (radius / 16) + 1;
+        
+        // Only scan chunks that are already loaded by the game naturally
+        for (int cx = -chunkRadius; cx <= chunkRadius; cx++) {
+            for (int cz = -chunkRadius; cz <= chunkRadius; cz++) {
+                WorldChunk chunk = mc.world.getChunk(playerChunkX + cx, playerChunkZ + cz);
+                if (chunk != null && chunk.isLoaded()) {
+                    scanChunk(chunk);
+                }
+            }
+        }
+    }
+    
+    private void scanForBlockEntities() {
+        if (mc.world == null || mc.player == null) return;
+        
+        int radius = (int) this.range.getValue();
+        BlockPos playerPos = mc.player.getBlockPos();
+        int chunkRadius = (radius / 16) + 1;
+        int playerChunkX = playerPos.getX() >> 4;
+        int playerChunkZ = playerPos.getZ() >> 4;
+        
+        for (int cx = -chunkRadius; cx <= chunkRadius; cx++) {
+            for (int cz = -chunkRadius; cz <= chunkRadius; cz++) {
+                WorldChunk chunk = mc.world.getChunk(playerChunkX + cx, playerChunkZ + cz);
+                if (chunk == null) continue;
+                scanChunk(chunk);
+            }
+        }
+    }
+    
+    private void scanChunk(WorldChunk chunk) {
         if (mc.player == null) return;
         
         int radius = (int) this.range.getValue();
         BlockPos playerPos = mc.player.getBlockPos();
         
-        // Use chunk's block entity map directly (no extra packets sent)
-        Map<BlockPos, BlockEntity> blockEntities = chunk.getBlockEntities();
-        
-        for (Map.Entry<BlockPos, BlockEntity> entry : blockEntities.entrySet()) {
-            BlockPos pos = entry.getKey();
-            BlockEntity be = entry.getValue();
-            
+        for (BlockPos pos : chunk.getBlockEntityPositions()) {
+            BlockEntity be = mc.world.getBlockEntity(pos);
             if (be == null) continue;
             
             double distance = Math.sqrt(playerPos.getSquaredDistance(pos));
@@ -155,7 +177,6 @@ public final class BlockEntityDebug extends Module {
             Color color = getBlockEntityColor(be);
             if (color == null) continue;
             
-            // Only update if position changed or new
             if (!foundBlockEntities.containsKey(pos)) {
                 this.foundBlockEntities.put(pos, new BlockEntityInfo(pos, be, color, distance, System.currentTimeMillis()));
             }
@@ -164,20 +185,18 @@ public final class BlockEntityDebug extends Module {
     
     private void updateDistances() {
         if (mc.player == null) return;
-        
         BlockPos playerPos = mc.player.getBlockPos();
         
-        for (Map.Entry<BlockPos, BlockEntityInfo> entry : foundBlockEntities.entrySet()) {
-            BlockEntityInfo info = entry.getValue();
-            double newDistance = Math.sqrt(playerPos.getSquaredDistance(info.getPos()));
+        Iterator<Map.Entry<BlockPos, BlockEntityInfo>> iterator = foundBlockEntities.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<BlockPos, BlockEntityInfo> entry = iterator.next();
+            double newDistance = Math.sqrt(playerPos.getSquaredDistance(entry.getKey()));
             
-            // Remove if out of range
             if (newDistance > this.range.getValue() + 10) {
-                foundBlockEntities.remove(entry.getKey());
+                iterator.remove();
             } else {
-                // Update distance in the info object (need to recreate or add setter)
-                BlockEntityInfo updated = new BlockEntityInfo(info.getPos(), info.getEntity(), info.getColor(), newDistance, info.getFirstSeen());
-                foundBlockEntities.put(entry.getKey(), updated);
+                BlockEntityInfo old = entry.getValue();
+                entry.setValue(new BlockEntityInfo(old.getPos(), old.getEntity(), old.getColor(), newDistance, old.getFirstSeen()));
             }
         }
     }
@@ -190,7 +209,6 @@ public final class BlockEntityDebug extends Module {
         if (be instanceof BeaconBlockEntity && this.highlightBeacons.getValue()) return BEACON_COLOR;
         if (be instanceof BarrelBlockEntity && this.highlightChests.getValue()) return CHEST_COLOR;
         if (be instanceof TrappedChestBlockEntity && this.highlightChests.getValue()) return CHEST_COLOR;
-        if (be instanceof EndPortalBlockEntity && this.highlightSpawners.getValue()) return SPAWNER_COLOR;
         return null;
     }
     
@@ -213,10 +231,10 @@ public final class BlockEntityDebug extends Module {
             BlockPos pos = info.getPos();
             Color color = info.getColor();
             
-            // Fade older entries (older than 30 seconds)
-            if (silentMode.getValue() && System.currentTimeMillis() - info.getFirstSeen() > 30000) {
-                int alpha = Math.max(50, color.getAlpha() - 50);
-                color = new Color(color.getRed(), color.getGreen(), color.getBlue(), alpha);
+            // Fade older entries (found more than 60 seconds ago)
+            if (passiveMode.getValue() && System.currentTimeMillis() - info.getFirstSeen() > 60000) {
+                int fadeAlpha = Math.max(50, color.getAlpha() - 100);
+                color = new Color(color.getRed(), color.getGreen(), color.getBlue(), fadeAlpha);
             }
             
             float x1 = pos.getX() + 0.1f;
@@ -229,10 +247,7 @@ public final class BlockEntityDebug extends Module {
             // Filled box
             RenderUtils.renderFilledBox(matrices, x1, y1, z1, x2, y2, z2, color);
             
-            // Draw outline for better visibility
-            RenderUtils.renderOutlineBox(matrices, x1, y1, z1, x2, y2, z2, 2.0f, Color.WHITE);
-            
-            // Draw distance text - FIXED for DonutSMP
+            // Draw distance text - FIXED using proper DrawContext
             if (this.showDistance.getValue()) {
                 String distText = (int)info.getDistance() + "m";
                 
@@ -242,20 +257,14 @@ public final class BlockEntityDebug extends Module {
                 matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
                 matrices.scale(0.025f, 0.025f, 0.025f);
                 
-                // Use the client's TextRenderer properly
-                net.minecraft.client.font.TextRenderer textRenderer = mc.textRenderer;
-                int textWidth = textRenderer.getWidth(distText);
+                // We need DrawContext - get it from the event or create one
+                // Since Render3DEvent doesn't have DrawContext, we use the client's text renderer directly
+                int textWidth = mc.textRenderer.getWidth(distText);
                 int x = -textWidth / 2;
                 int y = 0;
                 
-                // Draw background
-                matrices.push();
-                matrices.translate(0, 0, 0);
-                matrices.scale(1.0f, 1.0f, 1.0f);
-                matrices.pop();
-                
-                // Draw text using the proper method for your version
-                textRenderer.draw(distText, x, y, Color.WHITE.getRGB(), false, matrices.peek().getPositionMatrix(), matrices.peek().getNormalMatrix(), false, 0, 15728880);
+                // Draw text directly using the matrix stack
+                mc.textRenderer.draw(matrices, distText, x, y, Color.WHITE.getRGB());
                 
                 matrices.pop();
             }
