@@ -156,15 +156,23 @@ public final class BlockEntityDebug extends Module {
             // Filled box
             RenderUtils.renderFilledBox(matrices, x1, y1, z1, x2, y2, z2, color);
             
-            // Draw distance text
+            // Draw distance text - using the render method that takes MatrixStack
             if (this.showDistance.getValue()) {
                 String distText = (int)info.getDistance() + "m";
+                int textWidth = TextRenderer.getWidth(distText);
+                
+                // Save current matrix state
                 matrices.push();
-                matrices.translate(pos.getX() + 0.5, pos.getY() + 1.1, pos.getZ() + 0.5);
+                // Translate to the top of the block
+                matrices.translate(pos.getX() + 0.5, pos.getY() + 1.2, pos.getZ() + 0.5);
+                // Rotate to always face the camera
                 matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-camera.getYaw()));
                 matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
+                // Scale down the text
                 matrices.scale(0.025f, 0.025f, 0.025f);
-                TextRenderer.drawString(distText, matrices, -TextRenderer.getWidth(distText) / 2, 0, Color.WHITE.getRGB());
+                // Draw the text - TextRenderer has a method that accepts MatrixStack
+                TextRenderer.drawString(distText, matrices, -textWidth / 2, 0, Color.WHITE.getRGB());
+                // Restore matrix state
                 matrices.pop();
             }
         }
