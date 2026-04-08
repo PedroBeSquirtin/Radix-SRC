@@ -1,14 +1,17 @@
 package skid.krypton.module.modules.render;
 
 import net.minecraft.block.entity.*;
-import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.render.Camera;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.decoration.ItemFrameEntity;
+import net.minecraft.network.packet.s2c.play.PlaySoundS2CPacket;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.chunk.WorldChunk;
 import skid.krypton.event.EventListener;
+import skid.krypton.event.events.PacketEvent;
 import skid.krypton.event.events.Render3DEvent;
 import skid.krypton.event.events.TickEvent;
 import skid.krypton.module.Category;
@@ -24,256 +27,211 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class BlockEntityDebug extends Module {
     
-    private final NumberSetting customRange = new NumberSetting(EncryptedString.of("Custom Range"), 10, 500, 0, 5);
-    private final BooleanSetting useRenderDistance = new BooleanSetting(EncryptedString.of("Use Render Distance"), true);
-    private final BooleanSetting highlightChests = new BooleanSetting(EncryptedString.of("Chests"), true);
-    private final BooleanSetting highlightShulkers = new BooleanSetting(EncryptedString.of("Shulkers"), true);
-    private final BooleanSetting highlightSpawners = new BooleanSetting(EncryptedString.of("Spawners"), true);
-    private final BooleanSetting highlightFurnaces = new BooleanSetting(EncryptedString.of("Furnaces"), true);
-    private final BooleanSetting highlightBeacons = new BooleanSetting(EncryptedString.of("Beacons"), true);
-    private final BooleanSetting showTracers = new BooleanSetting(EncryptedString.of("Show Tracers"), true);
-    private final BooleanSetting aggressiveScan = new BooleanSetting(EncryptedString.of("Aggressive Scan"), true);
+    private final NumberSetting range = new NumberSetting(EncryptedString.of("Range"), 10, 500, 200, 10);
+    private final BooleanSetting soundBypass = new BooleanSetting(EncryptedString.of("Sound Bypass"), true);
+    private final BooleanSetting entityDetect = new BooleanSetting(EncryptedString.of("Entity Detect"), true);
+    private final BooleanSetting showTracers = new BooleanSetting(EncryptedString.of("Tracers"), true);
+    private final BooleanSetting showBoxes = new BooleanSetting(EncryptedString.of("Show Boxes"), true);
     
-    // Colors
-    private static final Color CHEST_COLOR = new Color(255, 200, 50, 180);
-    private static final Color SHULKER_COLOR = new Color(200, 50, 255, 180);
-    private static final Color SPAWNER_COLOR = new Color(255, 50, 50, 180);
-    private static final Color FURNACE_COLOR = new Color(150, 150, 150, 180);
-    private static final Color BEACON_COLOR = new Color(50, 200, 255, 180);
+    // Colors for different detection methods
+    private static final Color SOUND_COLOR = new Color(255, 50, 50, 200);      // Red - Sound detected (high confidence)
+    private static final Color CHEST_COLOR = new Color(255, 200, 50, 180);      // Orange - Chest
+    private static final Color SHULKER_COLOR = new Color(200, 50, 255, 180);     // Purple - Shulker
+    private static final Color SPAWNER_COLOR = new Color(255, 50, 50, 180);      // Red - Spawner
+    private static final Color ITEM_FRAME_COLOR = new Color(50, 200, 255, 180);  // Blue - Item Frame
+    private static final Color UNKNOWN_COLOR = new Color(255, 255, 255, 150);     // White - Unknown
     
     // Cache
-    private final Map<BlockPos, BlockEntityInfo> foundBlockEntities = new ConcurrentHashMap<>();
-    private final Set<Long> scannedChunks = new HashSet<>();
+    private final Map<BlockPos, BaseNode> discoveredBases = new ConcurrentHashMap<>();
     private int scanTimer = 0;
-    private int forceLoadTimer = 0;
     
     public BlockEntityDebug() {
-        super(EncryptedString.of("BlockEntity Debug"), 
-              EncryptedString.of("Find active bases - Advanced Bypass"), 
+        super(EncryptedString.of("Base Finder"), 
+              EncryptedString.of("Ultimate DonutSMP Bypass - Uses Sound Packets"), 
               -1, Category.RENDER);
-        this.addSettings(this.customRange, this.useRenderDistance, this.highlightChests, this.highlightShulkers, 
-                        this.highlightSpawners, this.highlightFurnaces, this.highlightBeacons, 
-                        this.showTracers, this.aggressiveScan);
+        this.addSettings(range, soundBypass, entityDetect, showTracers, showBoxes);
     }
     
     @Override
     public void onEnable() {
         super.onEnable();
-        this.foundBlockEntities.clear();
-        this.scannedChunks.clear();
-        this.scanTimer = 0;
-        this.forceLoadTimer = 0;
+        discoveredBases.clear();
+        scanTimer = 0;
     }
     
-    @Override
-    public void onDisable() {
-        super.onDisable();
-        this.foundBlockEntities.clear();
+    // ULTIMATE BYPASS: Sound packets (server CANNOT hide these)
+    @EventListener
+    public void onPacketReceive(PacketEvent.Receive event) {
+        if (!soundBypass.getValue()) return;
+        if (!(event.getPacket() instanceof PlaySoundS2CPacket packet)) return;
+        
+        String soundPath = packet.getSound().value().id().getPath();
+        BlockPos soundPos = new BlockPos((int)packet.getX(), (int)packet.getY(), (int)packet.getZ());
+        
+        // Base activity sounds
+        boolean isBaseSound = false;
+        Color color = SOUND_COLOR;
+        String type = "Unknown";
+        
+        if (soundPath.contains("chest.open") || soundPath.contains("chest.close")) {
+            isBaseSound = true;
+            type = "Chest Action";
+            color = new Color(255, 200, 50, 255);
+        }
+        else if (soundPath.contains("shulker_box.open") || soundPath.contains("shulker_box.close")) {
+            isBaseSound = true;
+            type = "Shulker Action";
+            color = new Color(200, 50, 255, 255);
+        }
+        else if (soundPath.contains("piston") || soundPath.contains("door")) {
+            isBaseSound = true;
+            type = "Redstone Activity";
+            color = new Color(255, 100, 0, 255);
+        }
+        else if (soundPath.contains("furnace") || soundPath.contains("blast")) {
+            isBaseSound = true;
+            type = "Furnace Activity";
+            color = new Color(150, 150, 150, 255);
+        }
+        else if (soundPath.contains("block.beacon")) {
+            isBaseSound = true;
+            type = "Beacon Active";
+            color = new Color(50, 200, 255, 255);
+        }
+        else if (soundPath.contains("entity.experience") || soundPath.contains("entity.player")) {
+            isBaseSound = true;
+            type = "Player Activity";
+            color = new Color(0, 255, 0, 255);
+        }
+        
+        if (isBaseSound) {
+            discoveredBases.put(soundPos, new BaseNode(soundPos, color, type, System.currentTimeMillis(), "SOUND"));
+        }
     }
     
     @EventListener
     public void onTick(TickEvent event) {
         if (mc.player == null || mc.world == null) return;
         
-        this.scanTimer++;
-        this.forceLoadTimer++;
+        scanTimer++;
         
-        // Force load chunks within render distance every 10 ticks
-        if (aggressiveScan.getValue() && this.forceLoadTimer >= 10) {
-            this.forceLoadNearbyChunks();
-            this.forceLoadTimer = 0;
+        if (scanTimer >= 10) {
+            // Entity-based detection (backup method)
+            if (entityDetect.getValue()) {
+                scanEntities();
+                scanItemFrames();
+                scanTileEntities();
+            }
+            scanTimer = 0;
         }
         
-        // Scan every 2 ticks for aggressive mode, 10 for passive
-        int scanInterval = aggressiveScan.getValue() ? 2 : 10;
-        if (this.scanTimer >= scanInterval) {
-            this.scanForBlockEntities();
-            this.scanTimer = 0;
-        }
-        
-        this.updateDistances();
+        // Cleanup out-of-range nodes
+        double rangeSq = Math.pow(range.getValue(), 2);
+        discoveredBases.entrySet().removeIf(entry -> 
+            mc.player.getSquaredDistance(entry.getKey().toCenterPos()) > rangeSq);
     }
     
-    private void forceLoadNearbyChunks() {
-        if (mc.player == null || mc.world == null) return;
+    private void scanEntities() {
+        if (mc.world == null) return;
         
-        int renderDistance = mc.options.getViewDistance().getValue();
-        int range = getRange();
-        int chunkRadius = Math.max(renderDistance, range / 16) + 2;
-        
-        ClientPlayerEntity player = mc.player;
-        int centerChunkX = player.getChunkPos().x;
-        int centerChunkZ = player.getChunkPos().z;
-        
-        // Force chunks to load by accessing them
-        for (int x = -chunkRadius; x <= chunkRadius; x++) {
-            for (int z = -chunkRadius; z <= chunkRadius; z++) {
-                int chunkX = centerChunkX + x;
-                int chunkZ = centerChunkZ + z;
-                long chunkKey = (long) chunkX << 32 | (chunkZ & 0xFFFFFFFFL);
-                
-                if (!scannedChunks.contains(chunkKey)) {
-                    // Access chunk to force load
-                    WorldChunk chunk = mc.world.getChunk(chunkX, chunkZ);
-                    if (chunk != null) {
-                        scannedChunks.add(chunkKey);
-                    }
+        for (Entity entity : mc.world.getEntities()) {
+            if (entity instanceof ItemEntity item) {
+                String name = item.getStack().getName().getString().toLowerCase();
+                if (name.contains("diamond") || name.contains("netherite") || name.contains("elytra")) {
+                    BlockPos pos = entity.getBlockPos();
+                    discoveredBases.putIfAbsent(pos, new BaseNode(pos, CHEST_COLOR, "Valuable Drop", System.currentTimeMillis(), "ENTITY"));
                 }
             }
         }
     }
     
-    private int getRange() {
-        if (useRenderDistance.getValue()) {
-            return mc.options.getViewDistance().getValue() * 16;
+    private void scanItemFrames() {
+        for (Entity entity : mc.world.getEntities()) {
+            if (entity instanceof ItemFrameEntity frame && !frame.getStack().isEmpty()) {
+                BlockPos pos = frame.getBlockPos();
+                discoveredBases.putIfAbsent(pos, new BaseNode(pos, ITEM_FRAME_COLOR, "Item Frame", System.currentTimeMillis(), "ENTITY"));
+            }
         }
-        return (int) this.customRange.getValue();
     }
     
-    private void scanForBlockEntities() {
-        if (mc.world == null || mc.player == null) return;
-        
-        int range = getRange();
-        BlockPos playerPos = mc.player.getBlockPos();
-        int chunkRadius = (range / 16) + 2;
-        int playerChunkX = playerPos.getX() >> 4;
-        int playerChunkZ = playerPos.getZ() >> 4;
-        
-        // Scan all chunks within radius
-        for (int cx = -chunkRadius; cx <= chunkRadius; cx++) {
-            for (int cz = -chunkRadius; cz <= chunkRadius; cz++) {
-                WorldChunk chunk = mc.world.getChunk(playerChunkX + cx, playerChunkZ + cz);
-                if (chunk == null) continue;
+    private void scanTileEntities() {
+        Iterable<WorldChunk> chunks = mc.world.getChunkManager().getLoadedChunks();
+        for (WorldChunk chunk : chunks) {
+            if (chunk == null) continue;
+            for (Map.Entry<BlockPos, BlockEntity> entry : chunk.getBlockEntities().entrySet()) {
+                BlockEntity be = entry.getValue();
+                Color color = null;
+                String type = null;
                 
-                scanChunk(chunk);
+                if (be instanceof ChestBlockEntity) {
+                    color = CHEST_COLOR;
+                    type = "Chest";
+                } else if (be instanceof ShulkerBoxBlockEntity) {
+                    color = SHULKER_COLOR;
+                    type = "Shulker";
+                } else if (be instanceof MobSpawnerBlockEntity) {
+                    color = SPAWNER_COLOR;
+                    type = "Spawner";
+                } else {
+                    continue;
+                }
+                
+                discoveredBases.putIfAbsent(entry.getKey(), 
+                    new BaseNode(entry.getKey(), color, type, System.currentTimeMillis(), "TILE"));
             }
         }
-    }
-    
-    private void scanChunk(WorldChunk chunk) {
-        if (mc.player == null) return;
-        
-        int range = getRange();
-        BlockPos playerPos = mc.player.getBlockPos();
-        
-        // Get all block entities in chunk
-        Map<BlockPos, BlockEntity> blockEntities = chunk.getBlockEntities();
-        
-        for (Map.Entry<BlockPos, BlockEntity> entry : blockEntities.entrySet()) {
-            BlockPos pos = entry.getKey();
-            BlockEntity be = entry.getValue();
-            
-            if (be == null) continue;
-            
-            double distance = Math.sqrt(playerPos.getSquaredDistance(pos));
-            if (distance > range) continue;
-            
-            Color color = getBlockEntityColor(be);
-            if (color == null) continue;
-            
-            // Update or add
-            foundBlockEntities.put(pos, new BlockEntityInfo(pos, be, color, distance, System.currentTimeMillis()));
-        }
-    }
-    
-    private void updateDistances() {
-        if (mc.player == null) return;
-        BlockPos playerPos = mc.player.getBlockPos();
-        int range = getRange();
-        
-        Iterator<Map.Entry<BlockPos, BlockEntityInfo>> iterator = foundBlockEntities.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<BlockPos, BlockEntityInfo> entry = iterator.next();
-            double newDistance = Math.sqrt(playerPos.getSquaredDistance(entry.getKey()));
-            
-            if (newDistance > range + 16) {
-                iterator.remove();
-            }
-        }
-    }
-    
-    private Color getBlockEntityColor(BlockEntity be) {
-        if (be instanceof ChestBlockEntity && this.highlightChests.getValue()) return CHEST_COLOR;
-        if (be instanceof ShulkerBoxBlockEntity && this.highlightShulkers.getValue()) return SHULKER_COLOR;
-        if (be instanceof MobSpawnerBlockEntity && this.highlightSpawners.getValue()) return SPAWNER_COLOR;
-        if (be instanceof FurnaceBlockEntity && this.highlightFurnaces.getValue()) return FURNACE_COLOR;
-        if (be instanceof BeaconBlockEntity && this.highlightBeacons.getValue()) return BEACON_COLOR;
-        if (be instanceof BarrelBlockEntity && this.highlightChests.getValue()) return CHEST_COLOR;
-        if (be instanceof TrappedChestBlockEntity && this.highlightChests.getValue()) return CHEST_COLOR;
-        return null;
     }
     
     @EventListener
     public void onRender3D(Render3DEvent event) {
-        if (this.foundBlockEntities.isEmpty()) return;
+        if (discoveredBases.isEmpty()) return;
         
         Camera camera = RenderUtils.getCamera();
         if (camera == null) return;
         
         MatrixStack matrices = event.matrixStack;
         Vec3d cameraPos = RenderUtils.getCameraPos();
-        Vec3d playerPos = mc.player.getEyePos();
         
         matrices.push();
-        matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
-        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(camera.getYaw() + 180.0f));
         matrices.translate(-cameraPos.x, -cameraPos.y, -cameraPos.z);
         
-        for (BlockEntityInfo info : this.foundBlockEntities.values()) {
-            BlockPos pos = info.getPos();
-            Color color = info.getColor();
+        for (BaseNode node : discoveredBases.values()) {
+            BlockPos pos = node.pos();
+            Color color = node.color();
             
-            // Calculate alpha based on age (newer = brighter)
-            long age = System.currentTimeMillis() - info.getFirstSeen();
-            int alpha = aggressiveScan.getValue() ? 200 : Math.max(100, 200 - (int)(age / 1000));
+            // Pulse animation for sound-detected bases (they're active right now!)
+            long age = System.currentTimeMillis() - node.timestamp();
+            boolean isSound = node.source().equals("SOUND");
+            
+            int alpha;
+            if (isSound && age < 5000) {
+                // Pulsing effect for recent sounds
+                alpha = 180 + (int)(75 * Math.sin(age / 200.0));
+            } else {
+                alpha = Math.max(80, 200 - (int)(age / 5000));
+            }
+            
             Color renderColor = new Color(color.getRed(), color.getGreen(), color.getBlue(), Math.min(255, alpha));
             
-            float x1 = pos.getX() + 0.05f;
-            float y1 = pos.getY() + 0.05f;
-            float z1 = pos.getZ() + 0.05f;
-            float x2 = pos.getX() + 0.95f;
-            float y2 = pos.getY() + 0.95f;
-            float z2 = pos.getZ() + 0.95f;
+            if (showBoxes.getValue()) {
+                float x1 = pos.getX() + 0.1f;
+                float y1 = pos.getY() + 0.1f;
+                float z1 = pos.getZ() + 0.1f;
+                float x2 = pos.getX() + 0.9f;
+                float y2 = pos.getY() + 0.9f;
+                float z2 = pos.getZ() + 0.9f;
+                
+                RenderUtils.renderFilledBox(matrices, x1, y1, z1, x2, y2, z2, renderColor);
+            }
             
-            // Draw filled box
-            RenderUtils.renderFilledBox(matrices, x1, y1, z1, x2, y2, z2, renderColor);
-            
-            // Draw outline by rendering a second box with wireframe (using same method but different color)
-            Color outlineColor = new Color(color.getRed(), color.getGreen(), color.getBlue(), 255);
-            RenderUtils.renderFilledBox(matrices, x1 - 0.02f, y1 - 0.02f, z1 - 0.02f, x1 + 0.02f, y2 + 0.02f, z2 + 0.02f, outlineColor);
-            RenderUtils.renderFilledBox(matrices, x2 - 0.02f, y1 - 0.02f, z1 - 0.02f, x2 + 0.02f, y2 + 0.02f, z2 + 0.02f, outlineColor);
-            RenderUtils.renderFilledBox(matrices, x1 - 0.02f, y1 - 0.02f, z1 - 0.02f, x2 + 0.02f, y1 + 0.02f, z2 + 0.02f, outlineColor);
-            RenderUtils.renderFilledBox(matrices, x1 - 0.02f, y2 - 0.02f, z1 - 0.02f, x2 + 0.02f, y2 + 0.02f, z2 + 0.02f, outlineColor);
-            
-            // Draw tracer line to player
-            if (this.showTracers.getValue()) {
-                Vec3d blockCenter = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
-                RenderUtils.renderLine(matrices, outlineColor, blockCenter, playerPos);
+            if (showTracers.getValue()) {
+                Vec3d blockCenter = pos.toCenterPos();
+                RenderUtils.renderLine(matrices, renderColor, mc.player.getEyePos(), blockCenter);
             }
         }
         
         matrices.pop();
     }
     
-    private static class BlockEntityInfo {
-        private final BlockPos pos;
-        private final BlockEntity entity;
-        private final Color color;
-        private final double distance;
-        private final long firstSeen;
-        
-        public BlockEntityInfo(BlockPos pos, BlockEntity entity, Color color, double distance, long firstSeen) {
-            this.pos = pos;
-            this.entity = entity;
-            this.color = color;
-            this.distance = distance;
-            this.firstSeen = firstSeen;
-        }
-        
-        public BlockPos getPos() { return pos; }
-        public BlockEntity getEntity() { return entity; }
-        public Color getColor() { return color; }
-        public double getDistance() { return distance; }
-        public long getFirstSeen() { return firstSeen; }
-    }
+    private record BaseNode(BlockPos pos, Color color, String type, long timestamp, String source) {}
 }
