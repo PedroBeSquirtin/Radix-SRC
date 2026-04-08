@@ -10,6 +10,7 @@ import skid.krypton.module.modules.donut.*;
 import skid.krypton.module.modules.misc.*;
 import skid.krypton.module.modules.render.HUD;
 import skid.krypton.module.modules.render.PlayerESP;
+import skid.krypton.module.modules.render.BlockEntityDebug;
 import skid.krypton.module.modules.render.BlockEntityNameTags;
 import skid.krypton.module.modules.render.StorageESP;
 import skid.krypton.module.modules.render.TargetHUD;
@@ -62,6 +63,7 @@ public final class ModuleManager {
         this.a(new AutoSpawnerSell());
         this.a(new HUD());
         this.a(new PlayerESP());
+        this.a(new BlockEntityDebug());
         this.a(new StorageESP());
         this.a(new BlockEntityNameTags());
         this.a(new TargetHUD());
