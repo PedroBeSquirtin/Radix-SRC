@@ -1,13 +1,14 @@
 package skid.krypton.module.modules.render;
 
-import net.minecraft.block.entity.*;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.render.*;
+import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.block.entity.ChestBlockEntity;
+import net.minecraft.block.entity.ShulkerBoxBlockEntity;
+import net.minecraft.client.render.Camera;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.chunk.WorldChunk;
 import skid.krypton.event.EventListener;
 import skid.krypton.event.events.Render3DEvent;
 import skid.krypton.module.Category;
@@ -15,273 +16,108 @@ import skid.krypton.module.Module;
 import skid.krypton.module.setting.BooleanSetting;
 import skid.krypton.module.setting.NumberSetting;
 import skid.krypton.utils.EncryptedString;
+import skid.krypton.utils.RenderUtils;
+import skid.krypton.utils.TextRenderer;
 
 import java.awt.*;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class BlockEntityNameTags extends Module {
     
-    // Display settings
-    private final NumberSetting maxDistance = new NumberSetting(EncryptedString.of("Max Distance"), 10, 100, 50, 5);
-    private final NumberSetting textScale = new NumberSetting(EncryptedString.of("Text Scale"), 0.5, 2.0, 1.0, 0.1);
-    private final NumberSetting backgroundAlpha = new NumberSetting(EncryptedString.of("Background Alpha"), 0, 255, 100, 5);
-    private final NumberSetting textRed = new NumberSetting(EncryptedString.of("Text Red"), 0, 255, 255, 1);
-    private final NumberSetting textGreen = new NumberSetting(EncryptedString.of("Text Green"), 0, 255, 255, 1);
-    private final NumberSetting textBlue = new NumberSetting(EncryptedString.of("Text Blue"), 0, 255, 255, 1);
+    private final NumberSetting range = new NumberSetting(EncryptedString.of("Range"), 10, 80, 40, 5);
+    private final BooleanSetting showChests = new BooleanSetting(EncryptedString.of("Show Chests"), true);
+    private final BooleanSetting showShulkers = new BooleanSetting(EncryptedString.of("Show Shulkers"), true);
     
-    // ESP settings
-    private final BooleanSetting chestESP = new BooleanSetting(EncryptedString.of("Chest ESP"), true);
-    private final BooleanSetting shulkerESP = new BooleanSetting(EncryptedString.of("Shulker ESP"), true);
-    private final BooleanSetting furnaceESP = new BooleanSetting(EncryptedString.of("Furnace ESP"), true);
-    private final BooleanSetting hopperESP = new BooleanSetting(EncryptedString.of("Hopper ESP"), true);
-    private final BooleanSetting dropperESP = new BooleanSetting(EncryptedString.of("Dropper ESP"), true);
-    private final BooleanSetting dispenserESP = new BooleanSetting(EncryptedString.of("Dispenser ESP"), true);
-    private final BooleanSetting barrelESP = new BooleanSetting(EncryptedString.of("Barrel ESP"), true);
-    private final BooleanSetting spawnerESP = new BooleanSetting(EncryptedString.of("Spawner ESP"), true);
-    private final BooleanSetting beaconESP = new BooleanSetting(EncryptedString.of("Beacon ESP"), true);
-    private final BooleanSetting brewingStandESP = new BooleanSetting(EncryptedString.of("Brewing Stand ESP"), true);
-    private final BooleanSetting enderChestESP = new BooleanSetting(EncryptedString.of("Ender Chest ESP"), true);
-    
-    // ESP colors
-    private final NumberSetting chestRed = new NumberSetting(EncryptedString.of("Chest Red"), 0, 255, 255, 1);
-    private final NumberSetting chestGreen = new NumberSetting(EncryptedString.of("Chest Green"), 0, 255, 200, 1);
-    private final NumberSetting chestBlue = new NumberSetting(EncryptedString.of("Chest Blue"), 0, 255, 100, 1);
-    private final NumberSetting spawnerRed = new NumberSetting(EncryptedString.of("Spawner Red"), 0, 255, 255, 1);
-    private final NumberSetting spawnerGreen = new NumberSetting(EncryptedString.of("Spawner Green"), 0, 255, 0, 1);
-    private final NumberSetting spawnerBlue = new NumberSetting(EncryptedString.of("Spawner Blue"), 0, 255, 0, 1);
+    private final Map<BlockPos, String> nameTags = new ConcurrentHashMap<>();
+    private int scanTimer = 0;
     
     public BlockEntityNameTags() {
-        super(EncryptedString.of("BlockEntity NameTags"), EncryptedString.of("Shows nametags and ESP for block entities"), -1, Category.RENDER);
-        addSettings(maxDistance, textScale, backgroundAlpha, textRed, textGreen, textBlue,
-                    chestESP, shulkerESP, furnaceESP, hopperESP, dropperESP, dispenserESP,
-                    barrelESP, spawnerESP, beaconESP, brewingStandESP, enderChestESP,
-                    chestRed, chestGreen, chestBlue, spawnerRed, spawnerGreen, spawnerBlue);
+        super(EncryptedString.of("BlockEntity NameTags"), 
+              EncryptedString.of("Shows name tags on block entities"), 
+              -1, Category.RENDER);
+        this.addSettings(this.range, this.showChests, this.showShulkers);
     }
     
-    private Color getTextColor() {
-        return new Color((int) textRed.getValue(), (int) textGreen.getValue(), (int) textBlue.getValue(), 255);
-    }
-    
-    private Color getESPColor(BlockEntity blockEntity) {
-        if (blockEntity instanceof ChestBlockEntity || blockEntity instanceof TrappedChestBlockEntity) {
-            return new Color((int) chestRed.getValue(), (int) chestGreen.getValue(), (int) chestBlue.getValue(), 100);
-        } else if (blockEntity instanceof MobSpawnerBlockEntity) {
-            return new Color((int) spawnerRed.getValue(), (int) spawnerGreen.getValue(), (int) spawnerBlue.getValue(), 100);
-        } else if (blockEntity instanceof ShulkerBoxBlockEntity) {
-            return new Color(200, 100, 255, 100);
-        } else if (blockEntity instanceof AbstractFurnaceBlockEntity) {
-            return new Color(128, 128, 128, 100);
-        } else if (blockEntity instanceof HopperBlockEntity) {
-            return new Color(100, 100, 100, 100);
-        } else if (blockEntity instanceof BarrelBlockEntity) {
-            return new Color(139, 69, 19, 100);
-        } else if (blockEntity instanceof BeaconBlockEntity) {
-            return new Color(0, 255, 255, 100);
-        } else if (blockEntity instanceof BrewingStandBlockEntity) {
-            return new Color(0, 150, 0, 100);
-        } else if (blockEntity instanceof EnderChestBlockEntity) {
-            return new Color(100, 0, 100, 100);
+    @EventListener
+    public void onTick(TickEvent event) {
+        if (mc.player == null || mc.world == null) return;
+        
+        this.scanTimer++;
+        
+        if (this.scanTimer >= 10) {
+            this.scanForBlockEntities();
+            this.scanTimer = 0;
         }
-        return new Color(255, 255, 255, 100);
     }
     
-    private String getBlockEntityName(BlockEntity blockEntity) {
-        if (blockEntity instanceof ChestBlockEntity) {
-            return "Chest";
-        } else if (blockEntity instanceof TrappedChestBlockEntity) {
-            return "Trapped Chest";
-        } else if (blockEntity instanceof ShulkerBoxBlockEntity) {
-            return "Shulker Box";
-        } else if (blockEntity instanceof AbstractFurnaceBlockEntity) {
-            return "Furnace";
-        } else if (blockEntity instanceof HopperBlockEntity) {
-            return "Hopper";
-        } else if (blockEntity instanceof DropperBlockEntity) {
-            return "Dropper";
-        } else if (blockEntity instanceof DispenserBlockEntity) {
-            return "Dispenser";
-        } else if (blockEntity instanceof BarrelBlockEntity) {
-            return "Barrel";
-        } else if (blockEntity instanceof MobSpawnerBlockEntity) {
-            return "Spawner";
-        } else if (blockEntity instanceof BeaconBlockEntity) {
-            return "Beacon";
-        } else if (blockEntity instanceof BrewingStandBlockEntity) {
-            return "Brewing Stand";
-        } else if (blockEntity instanceof EnderChestBlockEntity) {
-            return "Ender Chest";
+    private void scanForBlockEntities() {
+        if (mc.world == null) return;
+        
+        this.nameTags.clear();
+        int radius = (int) this.range.getValue();
+        BlockPos playerPos = mc.player.getBlockPos();
+        
+        int chunkRadius = (radius / 16) + 1;
+        int playerChunkX = playerPos.getX() >> 4;
+        int playerChunkZ = playerPos.getZ() >> 4;
+        
+        for (int cx = -chunkRadius; cx <= chunkRadius; cx++) {
+            for (int cz = -chunkRadius; cz <= chunkRadius; cz++) {
+                WorldChunk chunk = mc.world.getChunk(playerChunkX + cx, playerChunkZ + cz);
+                if (chunk == null) continue;
+                
+                for (BlockPos pos : chunk.getBlockEntityPositions()) {
+                    BlockEntity be = mc.world.getBlockEntity(pos);
+                    if (be == null) continue;
+                    
+                    double distance = Math.sqrt(playerPos.getSquaredDistance(pos));
+                    if (distance > radius) continue;
+                    
+                    String name = getBlockEntityName(be);
+                    if (name != null) {
+                        this.nameTags.put(pos, name);
+                    }
+                }
+            }
         }
-        return blockEntity.getCachedState().getBlock().getName().getString();
     }
     
-    private boolean shouldRender(BlockEntity blockEntity) {
-        if (blockEntity instanceof ChestBlockEntity || blockEntity instanceof TrappedChestBlockEntity) {
-            return chestESP.getValue();
-        } else if (blockEntity instanceof ShulkerBoxBlockEntity) {
-            return shulkerESP.getValue();
-        } else if (blockEntity instanceof AbstractFurnaceBlockEntity) {
-            return furnaceESP.getValue();
-        } else if (blockEntity instanceof HopperBlockEntity) {
-            return hopperESP.getValue();
-        } else if (blockEntity instanceof DropperBlockEntity) {
-            return dropperESP.getValue();
-        } else if (blockEntity instanceof DispenserBlockEntity) {
-            return dispenserESP.getValue();
-        } else if (blockEntity instanceof BarrelBlockEntity) {
-            return barrelESP.getValue();
-        } else if (blockEntity instanceof MobSpawnerBlockEntity) {
-            return spawnerESP.getValue();
-        } else if (blockEntity instanceof BeaconBlockEntity) {
-            return beaconESP.getValue();
-        } else if (blockEntity instanceof BrewingStandBlockEntity) {
-            return brewingStandESP.getValue();
-        } else if (blockEntity instanceof EnderChestBlockEntity) {
-            return enderChestESP.getValue();
-        }
-        return false;
+    private String getBlockEntityName(BlockEntity be) {
+        if (be instanceof ChestBlockEntity && this.showChests.getValue()) return "Chest";
+        if (be instanceof ShulkerBoxBlockEntity && this.showShulkers.getValue()) return "Shulker Box";
+        return null;
     }
     
     @EventListener
     public void onRender3D(Render3DEvent event) {
-        if (mc.world == null || mc.player == null) return;
+        if (this.nameTags.isEmpty()) return;
         
-        Camera camera = mc.gameRenderer.getCamera();
-        Vec3d cameraPos = camera.getPos();
-        double maxDistSq = maxDistance.getValue() * maxDistance.getValue();
+        Camera camera = RenderUtils.getCamera();
+        if (camera == null) return;
         
-        // Get all loaded block entities - using the correct method
-        var blockEntities = mc.world.getBlockEntities();
+        MatrixStack matrices = event.matrixStack;
+        Vec3d cameraPos = RenderUtils.getCameraPos();
         
-        for (BlockEntity blockEntity : blockEntities.values()) {
-            BlockPos pos = blockEntity.getPos();
-            Vec3d blockPos = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
-            double distanceSq = cameraPos.squaredDistanceTo(blockPos);
+        matrices.push();
+        matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
+        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(camera.getYaw() + 180.0f));
+        matrices.translate(-cameraPos.x, -cameraPos.y, -cameraPos.z);
+        
+        for (Map.Entry<BlockPos, String> entry : this.nameTags.entrySet()) {
+            BlockPos pos = entry.getKey();
+            String name = entry.getValue();
             
-            if (distanceSq > maxDistSq) continue;
-            if (!shouldRender(blockEntity)) continue;
-            
-            // Render ESP outline
-            renderESPOutline(event.matrixStack, blockEntity, blockPos, cameraPos);
-            
-            // Render nametag
-            renderNameTag(event.matrixStack, blockEntity, blockPos, cameraPos);
+            matrices.push();
+            matrices.translate(pos.getX() + 0.5, pos.getY() + 1.2, pos.getZ() + 0.5);
+            matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-camera.getYaw()));
+            matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
+            matrices.scale(0.025f, 0.025f, 0.025f);
+            TextRenderer.drawString(name, matrices, -TextRenderer.getWidth(name) / 2, 0, Color.WHITE.getRGB());
+            matrices.pop();
         }
-    }
-    
-    private void renderESPOutline(MatrixStack matrixStack, BlockEntity blockEntity, Vec3d blockPos, Vec3d cameraPos) {
-        matrixStack.push();
         
-        double x = blockPos.x - cameraPos.x;
-        double y = blockPos.y - cameraPos.y;
-        double z = blockPos.z - cameraPos.z;
-        
-        matrixStack.translate(x, y, z);
-        
-        Color espColor = getESPColor(blockEntity);
-        float alpha = (float) (espColor.getAlpha() / 255.0);
-        float r = espColor.getRed() / 255f;
-        float g = espColor.getGreen() / 255f;
-        float b = espColor.getBlue() / 255f;
-        
-        Tessellator tessellator = Tessellator.getInstance();
-        BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
-        
-        float size = 0.55f;
-        
-        // Draw outline box
-        // Bottom square
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), -size, -size, -size).color(r, g, b, alpha);
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), size, -size, -size).color(r, g, b, alpha);
-        
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), size, -size, -size).color(r, g, b, alpha);
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), size, -size, size).color(r, g, b, alpha);
-        
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), size, -size, size).color(r, g, b, alpha);
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), -size, -size, size).color(r, g, b, alpha);
-        
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), -size, -size, size).color(r, g, b, alpha);
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), -size, -size, -size).color(r, g, b, alpha);
-        
-        // Top square
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), -size, size, -size).color(r, g, b, alpha);
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), size, size, -size).color(r, g, b, alpha);
-        
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), size, size, -size).color(r, g, b, alpha);
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), size, size, size).color(r, g, b, alpha);
-        
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), size, size, size).color(r, g, b, alpha);
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), -size, size, size).color(r, g, b, alpha);
-        
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), -size, size, size).color(r, g, b, alpha);
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), -size, size, -size).color(r, g, b, alpha);
-        
-        // Vertical lines
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), -size, -size, -size).color(r, g, b, alpha);
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), -size, size, -size).color(r, g, b, alpha);
-        
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), size, -size, -size).color(r, g, b, alpha);
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), size, size, -size).color(r, g, b, alpha);
-        
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), size, -size, size).color(r, g, b, alpha);
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), size, size, size).color(r, g, b, alpha);
-        
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), -size, -size, size).color(r, g, b, alpha);
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), -size, size, size).color(r, g, b, alpha);
-        
-        BufferRenderer.drawWithGlobalProgram(buffer.end());
-        
-        matrixStack.pop();
-    }
-    
-    private void renderNameTag(MatrixStack matrixStack, BlockEntity blockEntity, Vec3d blockPos, Vec3d cameraPos) {
-        matrixStack.push();
-        
-        double x = blockPos.x - cameraPos.x;
-        double y = blockPos.y - cameraPos.y + 0.9;
-        double z = blockPos.z - cameraPos.z;
-        
-        matrixStack.translate(x, y, z);
-        
-        // Always face the camera
-        float yaw = mc.gameRenderer.getCamera().getYaw();
-        float pitch = mc.gameRenderer.getCamera().getPitch();
-        matrixStack.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-yaw));
-        matrixStack.multiply(RotationAxis.POSITIVE_X.rotationDegrees(pitch));
-        
-        float scale = (float) textScale.getValue();
-        matrixStack.scale(scale, scale, scale);
-        
-        String name = getBlockEntityName(blockEntity);
-        TextRenderer textRenderer = mc.textRenderer;
-        int textWidth = textRenderer.getWidth(name);
-        int textHeight = textRenderer.fontHeight;
-        
-        // Draw background
-        int alpha = (int) backgroundAlpha.getValue();
-        Color bgColor = new Color(0, 0, 0, alpha);
-        Color textColor = getTextColor();
-        
-        DrawContext drawContext = new DrawContext(mc, mc.getBufferBuilders().getEntityVertexConsumers());
-        
-        // Background
-        Tessellator tessellator = Tessellator.getInstance();
-        BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
-        
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), -textWidth / 2f - 2, -textHeight - 1, 0)
-              .color(bgColor.getRed() / 255f, bgColor.getGreen() / 255f, bgColor.getBlue() / 255f, bgColor.getAlpha() / 255f);
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), textWidth / 2f + 2, -textHeight - 1, 0)
-              .color(bgColor.getRed() / 255f, bgColor.getGreen() / 255f, bgColor.getBlue() / 255f, bgColor.getAlpha() / 255f);
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), textWidth / 2f + 2, 1, 0)
-              .color(bgColor.getRed() / 255f, bgColor.getGreen() / 255f, bgColor.getBlue() / 255f, bgColor.getAlpha() / 255f);
-        buffer.vertex(matrixStack.peek().getPositionMatrix(), -textWidth / 2f - 2, 1, 0)
-              .color(bgColor.getRed() / 255f, bgColor.getGreen() / 255f, bgColor.getBlue() / 255f, bgColor.getAlpha() / 255f);
-        
-        BufferRenderer.drawWithGlobalProgram(buffer.end());
-        
-        // Draw text
-        drawContext.drawText(textRenderer, name, (int)(-textWidth / 2f), -textHeight, textColor.getRGB(), true);
-        
-        matrixStack.pop();
+        matrices.pop();
     }
 }
