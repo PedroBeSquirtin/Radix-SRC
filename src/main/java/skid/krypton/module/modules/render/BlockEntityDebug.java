@@ -5,7 +5,6 @@ import net.minecraft.client.render.Camera;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.network.packet.s2c.play.ChunkDataS2CPacket;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.chunk.WorldChunk;
@@ -19,7 +18,6 @@ import skid.krypton.module.setting.BooleanSetting;
 import skid.krypton.module.setting.NumberSetting;
 import skid.krypton.utils.EncryptedString;
 import skid.krypton.utils.RenderUtils;
-import skid.krypton.utils.TextRenderer;
 
 import java.awt.*;
 import java.util.*;
@@ -136,7 +134,7 @@ public final class BlockEntityDebug extends Module {
         for (int cx = -chunkRadius; cx <= chunkRadius; cx++) {
             for (int cz = -chunkRadius; cz <= chunkRadius; cz++) {
                 WorldChunk chunk = mc.world.getChunk(playerChunkX + cx, playerChunkZ + cz);
-                if (chunk != null && chunk.isLoaded()) {
+                if (chunk != null) {
                     scanChunk(chunk);
                 }
             }
@@ -247,7 +245,7 @@ public final class BlockEntityDebug extends Module {
             // Filled box
             RenderUtils.renderFilledBox(matrices, x1, y1, z1, x2, y2, z2, color);
             
-            // Draw distance text - FIXED using proper DrawContext
+            // Draw distance text - FIXED for your Minecraft version
             if (this.showDistance.getValue()) {
                 String distText = (int)info.getDistance() + "m";
                 
@@ -257,14 +255,18 @@ public final class BlockEntityDebug extends Module {
                 matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
                 matrices.scale(0.025f, 0.025f, 0.025f);
                 
-                // We need DrawContext - get it from the event or create one
-                // Since Render3DEvent doesn't have DrawContext, we use the client's text renderer directly
+                // FIX: Use the correct draw method for your Minecraft version
+                // Draw with shadow = true, and use matrix directly
                 int textWidth = mc.textRenderer.getWidth(distText);
-                int x = -textWidth / 2;
-                int y = 0;
+                float textX = -textWidth / 2f;
+                float textY = 0f;
                 
-                // Draw text directly using the matrix stack
-                mc.textRenderer.draw(matrices, distText, x, y, Color.WHITE.getRGB());
+                // Push a new matrix for text to avoid affecting other renders
+                matrices.push();
+                matrices.translate(textX, textY, 0);
+                // Use the standard text renderer
+                mc.textRenderer.draw(matrices, distText, 0, 0, Color.WHITE.getRGB());
+                matrices.pop();
                 
                 matrices.pop();
             }
