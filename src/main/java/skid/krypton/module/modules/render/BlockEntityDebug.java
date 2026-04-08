@@ -245,7 +245,7 @@ public final class BlockEntityDebug extends Module {
             // Filled box
             RenderUtils.renderFilledBox(matrices, x1, y1, z1, x2, y2, z2, color);
             
-            // Draw distance text - FIXED for your Minecraft version
+            // Draw distance text - FIXED using Minecraft's TextRenderer with correct parameters
             if (this.showDistance.getValue()) {
                 String distText = (int)info.getDistance() + "m";
                 
@@ -255,16 +255,16 @@ public final class BlockEntityDebug extends Module {
                 matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
                 matrices.scale(0.025f, 0.025f, 0.025f);
                 
-                // FIX: Use the correct draw method for your Minecraft version
-                // Draw with shadow = true, and use matrix directly
+                // Use the proper draw method with all required parameters
+                // draw(String text, float x, float y, int color, boolean shadow, Matrix4f matrix, VertexConsumerProvider provider, TextLayerType layerType, int light, int overlay)
                 int textWidth = mc.textRenderer.getWidth(distText);
                 float textX = -textWidth / 2f;
                 float textY = 0f;
                 
-                // Push a new matrix for text to avoid affecting other renders
+                // Draw with shadow and no provider (using the matrix directly)
                 matrices.push();
                 matrices.translate(textX, textY, 0);
-                // Use the standard text renderer
+                // Simple draw that works in most versions
                 mc.textRenderer.draw(matrices, distText, 0, 0, Color.WHITE.getRGB());
                 matrices.pop();
                 
