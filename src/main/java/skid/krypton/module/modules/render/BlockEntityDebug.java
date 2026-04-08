@@ -1,10 +1,14 @@
 package skid.krypton.module.modules.render;
 
 import net.minecraft.block.entity.*;
+import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.render.Camera;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.network.packet.c2s.play.RequestCommandCompletionsC2SPacket;
+import net.minecraft.network.packet.c2s.play.TeleportConfirmC2SPacket;
 import net.minecraft.network.packet.s2c.play.ChunkDataS2CPacket;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.chunk.WorldChunk;
@@ -25,41 +29,45 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class BlockEntityDebug extends Module {
     
-    private final NumberSetting range = new NumberSetting(EncryptedString.of("Range"), 10, 80, 50, 5);
+    private final NumberSetting customRange = new NumberSetting(EncryptedString.of("Custom Range"), 10, 500, 0, 5);
+    private final BooleanSetting useRenderDistance = new BooleanSetting(EncryptedString.of("Use Render Distance"), true);
     private final BooleanSetting highlightChests = new BooleanSetting(EncryptedString.of("Chests"), true);
     private final BooleanSetting highlightShulkers = new BooleanSetting(EncryptedString.of("Shulkers"), true);
     private final BooleanSetting highlightSpawners = new BooleanSetting(EncryptedString.of("Spawners"), true);
     private final BooleanSetting highlightFurnaces = new BooleanSetting(EncryptedString.of("Furnaces"), true);
     private final BooleanSetting highlightBeacons = new BooleanSetting(EncryptedString.of("Beacons"), true);
-    private final BooleanSetting passiveMode = new BooleanSetting(EncryptedString.of("Passive Mode (Anti-Detect)"), true);
+    private final BooleanSetting showTracers = new BooleanSetting(EncryptedString.of("Show Tracers"), true);
+    private final BooleanSetting aggressiveScan = new BooleanSetting(EncryptedString.of("Aggressive Scan"), true);
     
     // Colors
-    private static final Color CHEST_COLOR = new Color(255, 200, 50, 150);
-    private static final Color SHULKER_COLOR = new Color(200, 50, 255, 150);
-    private static final Color SPAWNER_COLOR = new Color(255, 50, 50, 150);
-    private static final Color FURNACE_COLOR = new Color(150, 150, 150, 150);
-    private static final Color BEACON_COLOR = new Color(50, 200, 255, 150);
+    private static final Color CHEST_COLOR = new Color(255, 200, 50, 180);
+    private static final Color SHULKER_COLOR = new Color(200, 50, 255, 180);
+    private static final Color SPAWNER_COLOR = new Color(255, 50, 50, 180);
+    private static final Color FURNACE_COLOR = new Color(150, 150, 150, 180);
+    private static final Color BEACON_COLOR = new Color(50, 200, 255, 180);
     
     // Cache
     private final Map<BlockPos, BlockEntityInfo> foundBlockEntities = new ConcurrentHashMap<>();
-    private final Set<Long> receivedChunks = new HashSet<>();
-    private int passiveScanTimer = 0;
+    private final Set<Long> scannedChunks = new HashSet<>();
+    private int scanTimer = 0;
+    private int forceLoadTimer = 0;
     
     public BlockEntityDebug() {
         super(EncryptedString.of("BlockEntity Debug"), 
-              EncryptedString.of("Find active bases - DonutSMP Bypass"), 
+              EncryptedString.of("Find active bases - Advanced Bypass"), 
               -1, Category.RENDER);
-        this.addSettings(this.range, this.highlightChests, this.highlightShulkers, 
+        this.addSettings(this.customRange, this.useRenderDistance, this.highlightChests, this.highlightShulkers, 
                         this.highlightSpawners, this.highlightFurnaces, this.highlightBeacons, 
-                        this.passiveMode);
+                        this.showTracers, this.aggressiveScan);
     }
     
     @Override
     public void onEnable() {
         super.onEnable();
         this.foundBlockEntities.clear();
-        this.receivedChunks.clear();
-        this.passiveScanTimer = 0;
+        this.scannedChunks.clear();
+        this.scanTimer = 0;
+        this.forceLoadTimer = 0;
     }
     
     @Override
@@ -68,89 +76,80 @@ public final class BlockEntityDebug extends Module {
         this.foundBlockEntities.clear();
     }
     
-    // HOOK INTO CHUNK PACKETS - THIS BYPASSES DONUTSMP
-    @EventListener
-    public void onPacketReceive(PacketReceiveEvent event) {
-        if (mc.player == null || mc.world == null) return;
-        if (!passiveMode.getValue()) return;
-        
-        // When server sends chunk data, we capture it passively
-        if (event.packet instanceof ChunkDataS2CPacket) {
-            ChunkDataS2CPacket chunkPacket = (ChunkDataS2CPacket) event.packet;
-            int chunkX = chunkPacket.getChunkX();
-            int chunkZ = chunkPacket.getChunkZ();
-            long chunkKey = (long) chunkX << 32 | (chunkZ & 0xFFFFFFFFL);
-            
-            if (!receivedChunks.contains(chunkKey)) {
-                receivedChunks.add(chunkKey);
-                // Wait a tick for chunk to be loaded, then scan
-                mc.execute(() -> {
-                    WorldChunk chunk = mc.world.getChunk(chunkX, chunkZ);
-                    if (chunk != null) {
-                        scanChunk(chunk);
-                    }
-                });
-            }
-        }
-    }
-    
     @EventListener
     public void onTick(TickEvent event) {
         if (mc.player == null || mc.world == null) return;
         
-        if (passiveMode.getValue()) {
-            // SLOW PASSIVE SCAN - NO EXTRA PACKETS
-            this.passiveScanTimer++;
-            if (this.passiveScanTimer >= 20) { // Slower = less detection
-                this.passiveScanLoadedChunks();
-                this.passiveScanTimer = 0;
-            }
-        } else {
-            // LEGACY MODE - Scan every 5 ticks
-            this.passiveScanTimer++;
-            if (this.passiveScanTimer >= 5) {
-                this.scanForBlockEntities();
-                this.passiveScanTimer = 0;
-            }
+        this.scanTimer++;
+        this.forceLoadTimer++;
+        
+        // Force load chunks within render distance every 10 ticks
+        if (aggressiveScan.getValue() && this.forceLoadTimer >= 10) {
+            this.forceLoadNearbyChunks();
+            this.forceLoadTimer = 0;
         }
         
-        // Update distances
+        // Scan every 2 ticks for aggressive mode, 10 for passive
+        int scanInterval = aggressiveScan.getValue() ? 2 : 10;
+        if (this.scanTimer >= scanInterval) {
+            this.scanForBlockEntities();
+            this.scanTimer = 0;
+        }
+        
         this.updateDistances();
     }
     
-    private void passiveScanLoadedChunks() {
-        if (mc.world == null || mc.player == null) return;
+    private void forceLoadNearbyChunks() {
+        if (mc.player == null || mc.world == null) return;
         
-        int radius = (int) this.range.getValue();
-        BlockPos playerPos = mc.player.getBlockPos();
-        int playerChunkX = playerPos.getX() >> 4;
-        int playerChunkZ = playerPos.getZ() >> 4;
-        int chunkRadius = (radius / 16) + 1;
+        int renderDistance = mc.options.getViewDistance().getValue();
+        int range = getRange();
+        int chunkRadius = Math.max(renderDistance, range / 16) + 2;
         
-        // Only scan chunks that are already loaded by the game naturally
-        for (int cx = -chunkRadius; cx <= chunkRadius; cx++) {
-            for (int cz = -chunkRadius; cz <= chunkRadius; cz++) {
-                WorldChunk chunk = mc.world.getChunk(playerChunkX + cx, playerChunkZ + cz);
-                if (chunk != null) {
-                    scanChunk(chunk);
+        ClientPlayerEntity player = mc.player;
+        int centerChunkX = player.getChunkPos().x;
+        int centerChunkZ = player.getChunkPos().z;
+        
+        // Force chunks to load by accessing them
+        for (int x = -chunkRadius; x <= chunkRadius; x++) {
+            for (int z = -chunkRadius; z <= chunkRadius; z++) {
+                int chunkX = centerChunkX + x;
+                int chunkZ = centerChunkZ + z;
+                long chunkKey = (long) chunkX << 32 | (chunkZ & 0xFFFFFFFFL);
+                
+                if (!scannedChunks.contains(chunkKey)) {
+                    // Access chunk to force load
+                    WorldChunk chunk = mc.world.getChunk(chunkX, chunkZ);
+                    if (chunk != null) {
+                        scannedChunks.add(chunkKey);
+                    }
                 }
             }
         }
     }
     
+    private int getRange() {
+        if (useRenderDistance.getValue()) {
+            return mc.options.getViewDistance().getValue() * 16;
+        }
+        return (int) this.customRange.getValue();
+    }
+    
     private void scanForBlockEntities() {
         if (mc.world == null || mc.player == null) return;
         
-        int radius = (int) this.range.getValue();
+        int range = getRange();
         BlockPos playerPos = mc.player.getBlockPos();
-        int chunkRadius = (radius / 16) + 1;
+        int chunkRadius = (range / 16) + 2;
         int playerChunkX = playerPos.getX() >> 4;
         int playerChunkZ = playerPos.getZ() >> 4;
         
+        // Scan all chunks within radius
         for (int cx = -chunkRadius; cx <= chunkRadius; cx++) {
             for (int cz = -chunkRadius; cz <= chunkRadius; cz++) {
                 WorldChunk chunk = mc.world.getChunk(playerChunkX + cx, playerChunkZ + cz);
                 if (chunk == null) continue;
+                
                 scanChunk(chunk);
             }
         }
@@ -159,35 +158,40 @@ public final class BlockEntityDebug extends Module {
     private void scanChunk(WorldChunk chunk) {
         if (mc.player == null) return;
         
-        int radius = (int) this.range.getValue();
+        int range = getRange();
         BlockPos playerPos = mc.player.getBlockPos();
         
-        for (BlockPos pos : chunk.getBlockEntityPositions()) {
-            BlockEntity be = mc.world.getBlockEntity(pos);
+        // Get all block entities in chunk
+        Map<BlockPos, BlockEntity> blockEntities = chunk.getBlockEntities();
+        
+        for (Map.Entry<BlockPos, BlockEntity> entry : blockEntities.entrySet()) {
+            BlockPos pos = entry.getKey();
+            BlockEntity be = entry.getValue();
+            
             if (be == null) continue;
             
             double distance = Math.sqrt(playerPos.getSquaredDistance(pos));
-            if (distance > radius) continue;
+            if (distance > range) continue;
             
             Color color = getBlockEntityColor(be);
             if (color == null) continue;
             
-            if (!foundBlockEntities.containsKey(pos)) {
-                this.foundBlockEntities.put(pos, new BlockEntityInfo(pos, be, color, distance, System.currentTimeMillis()));
-            }
+            // Update or add
+            foundBlockEntities.put(pos, new BlockEntityInfo(pos, be, color, distance, System.currentTimeMillis()));
         }
     }
     
     private void updateDistances() {
         if (mc.player == null) return;
         BlockPos playerPos = mc.player.getBlockPos();
+        int range = getRange();
         
         Iterator<Map.Entry<BlockPos, BlockEntityInfo>> iterator = foundBlockEntities.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<BlockPos, BlockEntityInfo> entry = iterator.next();
             double newDistance = Math.sqrt(playerPos.getSquaredDistance(entry.getKey()));
             
-            if (newDistance > this.range.getValue() + 10) {
+            if (newDistance > range + 16) {
                 iterator.remove();
             }
         }
@@ -213,6 +217,7 @@ public final class BlockEntityDebug extends Module {
         
         MatrixStack matrices = event.matrixStack;
         Vec3d cameraPos = RenderUtils.getCameraPos();
+        Vec3d playerPos = mc.player.getEyePos();
         
         matrices.push();
         matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
@@ -223,21 +228,29 @@ public final class BlockEntityDebug extends Module {
             BlockPos pos = info.getPos();
             Color color = info.getColor();
             
-            // Fade older entries (found more than 60 seconds ago)
-            if (passiveMode.getValue() && System.currentTimeMillis() - info.getFirstSeen() > 60000) {
-                int fadeAlpha = Math.max(50, color.getAlpha() - 100);
-                color = new Color(color.getRed(), color.getGreen(), color.getBlue(), fadeAlpha);
-            }
+            // Calculate alpha based on age (newer = brighter)
+            long age = System.currentTimeMillis() - info.getFirstSeen();
+            int alpha = aggressiveScan.getValue() ? 200 : Math.max(100, 200 - (int)(age / 1000));
+            color = new Color(color.getRed(), color.getGreen(), color.getBlue(), Math.min(255, alpha));
             
-            float x1 = pos.getX() + 0.1f;
-            float y1 = pos.getY() + 0.1f;
-            float z1 = pos.getZ() + 0.1f;
-            float x2 = pos.getX() + 0.9f;
-            float y2 = pos.getY() + 0.9f;
-            float z2 = pos.getZ() + 0.9f;
+            float x1 = pos.getX() + 0.05f;
+            float y1 = pos.getY() + 0.05f;
+            float z1 = pos.getZ() + 0.05f;
+            float x2 = pos.getX() + 0.95f;
+            float y2 = pos.getY() + 0.95f;
+            float z2 = pos.getZ() + 0.95f;
             
-            // Filled box
+            // Draw outline first
+            RenderUtils.renderOutlineBox(matrices, x1, y1, z1, x2, y2, z2, 1.5f, new Color(color.getRed(), color.getGreen(), color.getBlue(), 255));
+            
+            // Draw filled box with alpha
             RenderUtils.renderFilledBox(matrices, x1, y1, z1, x2, y2, z2, color);
+            
+            // Draw tracer line to player
+            if (this.showTracers.getValue()) {
+                Vec3d blockCenter = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
+                RenderUtils.renderLine(matrices, color, blockCenter, playerPos);
+            }
         }
         
         matrices.pop();
