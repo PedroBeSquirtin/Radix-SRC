@@ -4,16 +4,11 @@ import net.minecraft.block.entity.*;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.render.Camera;
 import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.network.packet.c2s.play.RequestCommandCompletionsC2SPacket;
-import net.minecraft.network.packet.c2s.play.TeleportConfirmC2SPacket;
-import net.minecraft.network.packet.s2c.play.ChunkDataS2CPacket;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
 import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.chunk.WorldChunk;
 import skid.krypton.event.EventListener;
-import skid.krypton.event.events.PacketReceiveEvent;
 import skid.krypton.event.events.Render3DEvent;
 import skid.krypton.event.events.TickEvent;
 import skid.krypton.module.Category;
@@ -231,7 +226,7 @@ public final class BlockEntityDebug extends Module {
             // Calculate alpha based on age (newer = brighter)
             long age = System.currentTimeMillis() - info.getFirstSeen();
             int alpha = aggressiveScan.getValue() ? 200 : Math.max(100, 200 - (int)(age / 1000));
-            color = new Color(color.getRed(), color.getGreen(), color.getBlue(), Math.min(255, alpha));
+            Color renderColor = new Color(color.getRed(), color.getGreen(), color.getBlue(), Math.min(255, alpha));
             
             float x1 = pos.getX() + 0.05f;
             float y1 = pos.getY() + 0.05f;
@@ -240,16 +235,20 @@ public final class BlockEntityDebug extends Module {
             float y2 = pos.getY() + 0.95f;
             float z2 = pos.getZ() + 0.95f;
             
-            // Draw outline first
-            RenderUtils.renderOutlineBox(matrices, x1, y1, z1, x2, y2, z2, 1.5f, new Color(color.getRed(), color.getGreen(), color.getBlue(), 255));
+            // Draw filled box
+            RenderUtils.renderFilledBox(matrices, x1, y1, z1, x2, y2, z2, renderColor);
             
-            // Draw filled box with alpha
-            RenderUtils.renderFilledBox(matrices, x1, y1, z1, x2, y2, z2, color);
+            // Draw outline by rendering a second box with wireframe (using same method but different color)
+            Color outlineColor = new Color(color.getRed(), color.getGreen(), color.getBlue(), 255);
+            RenderUtils.renderFilledBox(matrices, x1 - 0.02f, y1 - 0.02f, z1 - 0.02f, x1 + 0.02f, y2 + 0.02f, z2 + 0.02f, outlineColor);
+            RenderUtils.renderFilledBox(matrices, x2 - 0.02f, y1 - 0.02f, z1 - 0.02f, x2 + 0.02f, y2 + 0.02f, z2 + 0.02f, outlineColor);
+            RenderUtils.renderFilledBox(matrices, x1 - 0.02f, y1 - 0.02f, z1 - 0.02f, x2 + 0.02f, y1 + 0.02f, z2 + 0.02f, outlineColor);
+            RenderUtils.renderFilledBox(matrices, x1 - 0.02f, y2 - 0.02f, z1 - 0.02f, x2 + 0.02f, y2 + 0.02f, z2 + 0.02f, outlineColor);
             
             // Draw tracer line to player
             if (this.showTracers.getValue()) {
                 Vec3d blockCenter = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
-                RenderUtils.renderLine(matrices, color, blockCenter, playerPos);
+                RenderUtils.renderLine(matrices, outlineColor, blockCenter, playerPos);
             }
         }
         
