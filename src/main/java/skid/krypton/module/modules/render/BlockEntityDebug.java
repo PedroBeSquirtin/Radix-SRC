@@ -31,7 +31,6 @@ public final class BlockEntityDebug extends Module {
     private final BooleanSetting highlightSpawners = new BooleanSetting(EncryptedString.of("Spawners"), true);
     private final BooleanSetting highlightFurnaces = new BooleanSetting(EncryptedString.of("Furnaces"), true);
     private final BooleanSetting highlightBeacons = new BooleanSetting(EncryptedString.of("Beacons"), true);
-    private final BooleanSetting showDistance = new BooleanSetting(EncryptedString.of("Show Distance"), true);
     private final BooleanSetting passiveMode = new BooleanSetting(EncryptedString.of("Passive Mode (Anti-Detect)"), true);
     
     // Colors
@@ -44,7 +43,6 @@ public final class BlockEntityDebug extends Module {
     // Cache
     private final Map<BlockPos, BlockEntityInfo> foundBlockEntities = new ConcurrentHashMap<>();
     private final Set<Long> receivedChunks = new HashSet<>();
-    private int scanTimer = 0;
     private int passiveScanTimer = 0;
     
     public BlockEntityDebug() {
@@ -53,7 +51,7 @@ public final class BlockEntityDebug extends Module {
               -1, Category.RENDER);
         this.addSettings(this.range, this.highlightChests, this.highlightShulkers, 
                         this.highlightSpawners, this.highlightFurnaces, this.highlightBeacons, 
-                        this.showDistance, this.passiveMode);
+                        this.passiveMode);
     }
     
     @Override
@@ -61,7 +59,6 @@ public final class BlockEntityDebug extends Module {
         super.onEnable();
         this.foundBlockEntities.clear();
         this.receivedChunks.clear();
-        this.scanTimer = 0;
         this.passiveScanTimer = 0;
     }
     
@@ -109,11 +106,11 @@ public final class BlockEntityDebug extends Module {
                 this.passiveScanTimer = 0;
             }
         } else {
-            // LEGACY MODE (might get detected)
-            this.scanTimer++;
-            if (this.scanTimer >= 5) {
+            // LEGACY MODE - Scan every 5 ticks
+            this.passiveScanTimer++;
+            if (this.passiveScanTimer >= 5) {
                 this.scanForBlockEntities();
-                this.scanTimer = 0;
+                this.passiveScanTimer = 0;
             }
         }
         
@@ -192,9 +189,6 @@ public final class BlockEntityDebug extends Module {
             
             if (newDistance > this.range.getValue() + 10) {
                 iterator.remove();
-            } else {
-                BlockEntityInfo old = entry.getValue();
-                entry.setValue(new BlockEntityInfo(old.getPos(), old.getEntity(), old.getColor(), newDistance, old.getFirstSeen()));
             }
         }
     }
@@ -244,32 +238,6 @@ public final class BlockEntityDebug extends Module {
             
             // Filled box
             RenderUtils.renderFilledBox(matrices, x1, y1, z1, x2, y2, z2, color);
-            
-            // Draw distance text - FIXED using Minecraft's TextRenderer with correct parameters
-            if (this.showDistance.getValue()) {
-                String distText = (int)info.getDistance() + "m";
-                
-                matrices.push();
-                matrices.translate(pos.getX() + 0.5, pos.getY() + 1.2, pos.getZ() + 0.5);
-                matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-camera.getYaw()));
-                matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
-                matrices.scale(0.025f, 0.025f, 0.025f);
-                
-                // Use the proper draw method with all required parameters
-                // draw(String text, float x, float y, int color, boolean shadow, Matrix4f matrix, VertexConsumerProvider provider, TextLayerType layerType, int light, int overlay)
-                int textWidth = mc.textRenderer.getWidth(distText);
-                float textX = -textWidth / 2f;
-                float textY = 0f;
-                
-                // Draw with shadow and no provider (using the matrix directly)
-                matrices.push();
-                matrices.translate(textX, textY, 0);
-                // Simple draw that works in most versions
-                mc.textRenderer.draw(matrices, distText, 0, 0, Color.WHITE.getRGB());
-                matrices.pop();
-                
-                matrices.pop();
-            }
         }
         
         matrices.pop();
