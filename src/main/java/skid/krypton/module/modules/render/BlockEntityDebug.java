@@ -1,14 +1,9 @@
 package skid.krypton.module.modules.render;
 
-import net.minecraft.block.entity.*;
 import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.entity.decoration.ItemFrameEntity;
 import net.minecraft.network.packet.s2c.play.PlaySoundS2CPacket;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.chunk.WorldChunk;
 import skid.krypton.event.EventListener;
 import skid.krypton.event.events.PacketEvent;
 import skid.krypton.event.events.Render3DEvent;
@@ -27,29 +22,26 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class BlockEntityDebug extends Module {
     
     private final NumberSetting range = new NumberSetting(EncryptedString.of("Range"), 10, 500, 500, 10);
-    private final BooleanSetting soundBypass = new BooleanSetting(EncryptedString.of("Sound Bypass (Ultimate)"), true);
     private final BooleanSetting showTracers = new BooleanSetting(EncryptedString.of("Tracers"), true);
     private final BooleanSetting showBoxes = new BooleanSetting(EncryptedString.of("Show Boxes"), true);
-    private final BooleanSetting markActiveBases = new BooleanSetting(EncryptedString.of("Mark Active Bases"), true);
+    private final BooleanSetting notifyNewBase = new BooleanSetting(EncryptedString.of("Notify New Base"), true);
     
-    // Colors - Brighter for active bases
-    private static final Color ACTIVE_BASE = new Color(255, 0, 0, 255);      // Bright Red - Active right now
-    private static final Color CHEST_SOUND = new Color(255, 200, 50, 200);    // Orange - Chest activity
-    private static final Color DOOR_SOUND = new Color(255, 100, 0, 200);       // Dark Orange - Door/Piston
-    private static final Color FURNACE_SOUND = new Color(150, 150, 150, 200);  // Gray - Furnace
-    private static final Color BEACON_SOUND = new Color(50, 200, 255, 200);    // Cyan - Beacon
-    private static final Color PLAYER_SOUND = new Color(0, 255, 0, 200);       // Green - Player activity
+    // Colors based on Y-level (BELOW 20 = hidden base!)
+    private static final Color HIDDEN_BASE = new Color(255, 0, 0, 255);      // Bright Red - Below Y20 (hidden from chunk loading)
+    private static final Color NORMAL_BASE = new Color(255, 200, 50, 200);    // Orange - Above Y20
+    private static final Color PLAYER_ACTIVITY = new Color(0, 255, 0, 200);   // Green - Player sounds
     
-    // Cache with priority (sound discoveries are HIGH priority)
+    // Cache of discovered bases
     private final Map<BlockPos, BaseNode> discoveredBases = new ConcurrentHashMap<>();
     private final Map<BlockPos, Integer> soundCount = new ConcurrentHashMap<>();
+    private final Set<BlockPos> notifiedBases = new HashSet<>();
     private int scanTimer = 0;
     
     public BlockEntityDebug() {
         super(EncryptedString.of("Base Finder"), 
-              EncryptedString.of("ULTIMATE DONUTSMP BYPASS - Sound packets cannot be blocked"), 
+              EncryptedString.of("FINDS BASES BELOW Y20 - Sound packets bypass chunk limits"), 
               -1, Category.RENDER);
-        this.addSettings(range, soundBypass, showTracers, showBoxes, markActiveBases);
+        this.addSettings(range, showTracers, showBoxes, notifyNewBase);
     }
     
     @Override
@@ -57,91 +49,112 @@ public final class BlockEntityDebug extends Module {
         super.onEnable();
         discoveredBases.clear();
         soundCount.clear();
+        notifiedBases.clear();
         scanTimer = 0;
+        sendMessage("§a[Base Finder] §fSound bypass active - Will detect hidden bases below Y20!");
     }
     
-    // THE ULTIMATE BYPASS: Sound packets
-    // Servers CANNOT block these without breaking the game
+    // THE BYPASS: Sound packets work at ANY Y-level!
     @EventListener
     public void onPacketReceive(PacketEvent.Receive event) {
-        if (!soundBypass.getValue()) return;
         if (!(event.getPacket() instanceof PlaySoundS2CPacket packet)) return;
         
         String soundPath = packet.getSound().value().id().getPath();
         BlockPos soundPos = new BlockPos((int)packet.getX(), (int)packet.getY(), (int)packet.getZ());
         
-        // Check if within our range (can extend beyond render distance!)
+        // Check range
         if (mc.player != null && mc.player.getSquaredDistance(soundPos.toCenterPos()) > Math.pow(range.getValue(), 2)) {
-            return; // Out of our configured range
+            return;
         }
+        
+        // Check if this is BELOW Y20 (the hidden zone where bases are!)
+        boolean isHiddenBase = soundPos.getY() <= 20;
+        
+        // Also check if it's in deepslate layer (Y < 0)
+        boolean isDeepslate = soundPos.getY() < 0;
         
         Color color = null;
         String type = null;
         int priority = 0;
         
-        // Categorize sounds (all indicate base activity)
-        if (soundPath.contains("chest.open") || soundPath.contains("chest.close")) {
-            color = CHEST_SOUND;
-            type = "§6Chest Activity";  // Gold color in chat
-            priority = 5;
-        }
-        else if (soundPath.contains("shulker_box.open") || soundPath.contains("shulker_box.close")) {
-            color = CHEST_SOUND;
-            type = "§5Shulker Activity";
-            priority = 5;
+        // Categorize sounds
+        if (soundPath.contains("chest.open") || soundPath.contains("chest.close") ||
+            soundPath.contains("shulker_box.open") || soundPath.contains("barrel.open")) {
+            color = isHiddenBase ? HIDDEN_BASE : NORMAL_BASE;
+            type = isHiddenBase ? "§c§l⚠ HIDDEN BASE BELOW Y20! ⚠ §f(Chest)" : "Chest Activity";
+            priority = 10;
         }
         else if (soundPath.contains("piston") || soundPath.contains("door") || soundPath.contains("gate")) {
-            color = DOOR_SOUND;
-            type = "§6Redstone/Piston";
-            priority = 4;
+            color = isHiddenBase ? HIDDEN_BASE : NORMAL_BASE;
+            type = isHiddenBase ? "§c§l⚠ HIDDEN BASE BELOW Y20! ⚠ §f(Redstone)" : "Redstone Activity";
+            priority = 8;
         }
-        else if (soundPath.contains("furnace") || soundPath.contains("blast_furnace") || soundPath.contains("smoker")) {
-            color = FURNACE_SOUND;
-            type = "§7Furnace Activity";
-            priority = 3;
+        else if (soundPath.contains("furnace") || soundPath.contains("blast_furnace")) {
+            color = isHiddenBase ? HIDDEN_BASE : NORMAL_BASE;
+            type = isHiddenBase ? "§c§l⚠ HIDDEN BASE BELOW Y20! ⚠ §f(Furnace)" : "Furnace Activity";
+            priority = 7;
         }
         else if (soundPath.contains("beacon") || soundPath.contains("conduit")) {
-            color = BEACON_SOUND;
-            type = "§bBeacon/Conduit";
-            priority = 4;
+            color = isHiddenBase ? HIDDEN_BASE : NORMAL_BASE;
+            type = isHiddenBase ? "§c§l⚠ HIDDEN BASE BELOW Y20! ⚠ §f(Beacon)" : "Beacon Activity";
+            priority = 9;
         }
         else if (soundPath.contains("entity.player") || soundPath.contains("entity.experience")) {
-            color = PLAYER_SOUND;
-            type = "§aPlayer Activity";
-            priority = 5;
+            color = PLAYER_ACTIVITY;
+            type = isHiddenBase ? "§c§l⚠ HIDDEN BASE BELOW Y20! ⚠ §f(Player Activity)" : "§aPlayer Activity nearby";
+            priority = 10;
         }
         else if (soundPath.contains("block.anvil") || soundPath.contains("block.grindstone")) {
-            color = DOOR_SOUND;
-            type = "§6Anvil/Repair";
-            priority = 3;
+            color = isHiddenBase ? HIDDEN_BASE : NORMAL_BASE;
+            type = isHiddenBase ? "§c§l⚠ HIDDEN BASE BELOW Y20! ⚠ §f(Anvil)" : "Anvil Use";
+            priority = 6;
         }
-        else if (soundPath.contains("block.barrel.open") || soundPath.contains("block.barrel.close")) {
-            color = CHEST_SOUND;
-            type = "§6Barrel Activity";
-            priority = 4;
+        else if (soundPath.contains("block.enchantment_table")) {
+            color = isHiddenBase ? HIDDEN_BASE : NORMAL_BASE;
+            type = isHiddenBase ? "§c§l⚠ HIDDEN BASE BELOW Y20! ⚠ §f(Enchanting)" : "Enchanting";
+            priority = 7;
+        }
+        else if (soundPath.contains("block.portal") || soundPath.contains("block.end_portal")) {
+            color = isHiddenBase ? HIDDEN_BASE : NORMAL_BASE;
+            type = isHiddenBase ? "§c§l⚠ HIDDEN BASE BELOW Y20! ⚠ §f(Portal)" : "Portal Activity";
+            priority = 9;
         }
         
         if (color != null) {
-            // Count multiple sounds at same location
+            // Count multiple sounds
             soundCount.put(soundPos, soundCount.getOrDefault(soundPos, 0) + 1);
-            int soundCountValue = soundCount.get(soundPos);
+            int count = soundCount.get(soundPos);
             
-            // Higher priority for locations with multiple sounds
-            if (soundCountValue > 3) {
-                color = ACTIVE_BASE;
-                type = "§c§lHIGH ACTIVITY BASE!";
+            // Higher priority for multiple sounds
+            if (count >= 3) {
+                color = HIDDEN_BASE;
+                type = "§c§l⚠⚠ HIGH ACTIVITY HIDDEN BASE! ⚠⚠";
                 priority = 10;
             }
             
-            // Add or update the discovered base
+            // Add or update
             BaseNode existing = discoveredBases.get(soundPos);
             if (existing == null || existing.priority() < priority) {
-                discoveredBases.put(soundPos, new BaseNode(soundPos, color, type, System.currentTimeMillis(), priority, soundCountValue));
-            }
-            
-            // Optional: Send chat notification for high-activity bases
-            if (markActiveBases.getValue() && soundCountValue >= 3) {
-                sendMessage("§c[Base Finder] §fHigh activity detected at §c" + soundPos.getX() + " " + soundPos.getY() + " " + soundPos.getZ() + " §f(" + soundCountValue + " sounds)");
+                discoveredBases.put(soundPos, new BaseNode(soundPos, color, type, System.currentTimeMillis(), priority, count, isHiddenBase, isDeepslate));
+                
+                // NOTIFY for hidden bases below Y20!
+                if (notifyNewBase.getValue() && isHiddenBase && !notifiedBases.contains(soundPos)) {
+                    notifiedBases.add(soundPos);
+                    sendMessage("");
+                    sendMessage("§c§l═══════════════════════════════════════");
+                    sendMessage("§c§l🔴 HIDDEN BASE DETECTED BELOW Y20! 🔴");
+                    sendMessage("§fLocation: §eX: " + soundPos.getX() + " Y: " + soundPos.getY() + " Z: " + soundPos.getZ());
+                    sendMessage("§fLayer: " + (isDeepslate ? "§8Deepslate (Y < 0)" : "§7Stone Level (0-20)"));
+                    sendMessage("§fReason: §e" + type.replace("§c§l⚠ HIDDEN BASE BELOW Y20! ⚠ §f", ""));
+                    sendMessage("§fSound Count: §e" + count);
+                    sendMessage("§c§l═══════════════════════════════════════");
+                    sendMessage("");
+                    
+                    // Play sound alert
+                    if (mc.player != null) {
+                        mc.player.playSound(net.minecraft.sound.SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f);
+                    }
+                }
             }
         }
     }
@@ -150,16 +163,8 @@ public final class BlockEntityDebug extends Module {
     public void onTick(TickEvent event) {
         if (mc.player == null) return;
         
-        scanTimer++;
-        
-        // Backup scan for tile entities (only works for loaded chunks)
-        if (scanTimer >= 20) {
-            scanTileEntities();
-            scanTimer = 0;
-        }
-        
-        // Cleanup old nodes (keep for 2 minutes)
-        long cutoff = System.currentTimeMillis() - 120000;
+        // Cleanup old nodes (keep for 5 minutes)
+        long cutoff = System.currentTimeMillis() - 300000;
         discoveredBases.entrySet().removeIf(entry -> {
             if (entry.getValue().timestamp() < cutoff) {
                 soundCount.remove(entry.getKey());
@@ -172,27 +177,6 @@ public final class BlockEntityDebug extends Module {
         double rangeSq = Math.pow(range.getValue(), 2);
         discoveredBases.entrySet().removeIf(entry -> 
             mc.player.getSquaredDistance(entry.getKey().toCenterPos()) > rangeSq);
-    }
-    
-    private void scanTileEntities() {
-        if (mc.world == null) return;
-        
-        try {
-            Iterable<WorldChunk> chunks = mc.world.getChunkManager().getLoadedChunks();
-            for (WorldChunk chunk : chunks) {
-                if (chunk == null) continue;
-                for (Map.Entry<BlockPos, BlockEntity> entry : chunk.getBlockEntities().entrySet()) {
-                    BlockEntity be = entry.getValue();
-                    if (be instanceof ChestBlockEntity || be instanceof ShulkerBoxBlockEntity || be instanceof MobSpawnerBlockEntity) {
-                        // Only add if we haven't found it via sound yet (sounds are more reliable)
-                        discoveredBases.putIfAbsent(entry.getKey(), 
-                            new BaseNode(entry.getKey(), CHEST_SOUND, "Static Chest", System.currentTimeMillis(), 1, 0));
-                    }
-                }
-            }
-        } catch (Exception e) {
-            // Chunk access might be blocked - that's fine, sounds still work!
-        }
     }
     
     @EventListener
@@ -210,14 +194,18 @@ public final class BlockEntityDebug extends Module {
             Color color = node.color();
             long age = System.currentTimeMillis() - node.timestamp();
             
-            // Pulse effect for recent activity (last 10 seconds)
+            // Calculate alpha (pulse for recent activity)
             int alpha;
             if (age < 10000) {
-                // Pulsing animation for active bases
-                float pulse = 0.5f + 0.5f * (float)Math.sin(age / 200.0);
-                alpha = 150 + (int)(100 * pulse);
+                float pulse = 0.5f + 0.5f * (float)Math.sin(age / 150.0);
+                alpha = 150 + (int)(105 * pulse);
             } else {
-                alpha = Math.max(80, 150 - (int)(age / 2000));
+                alpha = Math.max(100, 200 - (int)(age / 3000));
+            }
+            
+            // Make hidden bases (below Y20) more visible
+            if (node.isHiddenBase()) {
+                alpha = Math.min(255, alpha + 50);
             }
             
             Color renderColor = new Color(color.getRed(), color.getGreen(), color.getBlue(), Math.min(255, alpha));
@@ -230,10 +218,16 @@ public final class BlockEntityDebug extends Module {
                 float y2 = pos.getY() + 0.9f;
                 float z2 = pos.getZ() + 0.9f;
                 
-                // Thicker outline for high-activity bases
-                if (node.priority() >= 5) {
-                    // Draw outer glow
-                    RenderUtils.renderFilledBox(matrices, x1 - 0.1f, y1 - 0.1f, z1 - 0.1f, x2 + 0.1f, y2 + 0.1f, z2 + 0.1f, new Color(255, 0, 0, 100));
+                // Glow effect for hidden bases (below Y20)
+                if (node.isHiddenBase()) {
+                    // Outer glow
+                    RenderUtils.renderFilledBox(matrices, x1 - 0.2f, y1 - 0.2f, z1 - 0.2f, 
+                                                x2 + 0.2f, y2 + 0.2f, z2 + 0.2f, 
+                                                new Color(255, 0, 0, 60));
+                    // Inner glow
+                    RenderUtils.renderFilledBox(matrices, x1 - 0.1f, y1 - 0.1f, z1 - 0.1f, 
+                                                x2 + 0.1f, y2 + 0.1f, z2 + 0.1f, 
+                                                new Color(255, 0, 0, 120));
                 }
                 
                 RenderUtils.renderFilledBox(matrices, x1, y1, z1, x2, y2, z2, renderColor);
@@ -241,7 +235,7 @@ public final class BlockEntityDebug extends Module {
             
             if (showTracers.getValue()) {
                 Vec3d blockCenter = pos.toCenterPos();
-                Color tracerColor = node.priority() >= 5 ? ACTIVE_BASE : renderColor;
+                Color tracerColor = node.isHiddenBase() ? HIDDEN_BASE : renderColor;
                 RenderUtils.renderLine(matrices, tracerColor, mc.player.getEyePos(), blockCenter);
             }
         }
@@ -249,5 +243,5 @@ public final class BlockEntityDebug extends Module {
         matrices.pop();
     }
     
-    private record BaseNode(BlockPos pos, Color color, String type, long timestamp, int priority, int soundCount) {}
+    private record BaseNode(BlockPos pos, Color color, String type, long timestamp, int priority, int soundCount, boolean isHiddenBase, boolean isDeepslate) {}
 }
