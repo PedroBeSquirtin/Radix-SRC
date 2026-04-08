@@ -44,7 +44,6 @@ public final class BlockEntityDebug extends Module {
     // Cache
     private final Map<BlockPos, BlockEntityInfo> foundBlockEntities = new ConcurrentHashMap<>();
     private int scanTimer = 0;
-    private int refreshTimer = 0;
     
     public BlockEntityDebug() {
         super(EncryptedString.of("BlockEntity Debug"), 
@@ -60,7 +59,6 @@ public final class BlockEntityDebug extends Module {
         super.onEnable();
         this.foundBlockEntities.clear();
         this.scanTimer = 0;
-        this.refreshTimer = 0;
     }
     
     @Override
@@ -159,7 +157,7 @@ public final class BlockEntityDebug extends Module {
             // Filled box
             RenderUtils.renderFilledBox(matrices, x1, y1, z1, x2, y2, z2, color);
             
-            // Distance text
+            // Draw distance text using proper rendering
             if (this.showDistance.getValue()) {
                 String distText = (int)info.getDistance() + "m";
                 matrices.push();
@@ -167,6 +165,7 @@ public final class BlockEntityDebug extends Module {
                 matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-camera.getYaw()));
                 matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
                 matrices.scale(0.025f, 0.025f, 0.025f);
+                // Use TextRenderer with the matrix directly - it accepts MatrixStack
                 TextRenderer.drawString(distText, matrices, -TextRenderer.getWidth(distText) / 2, 0, Color.WHITE.getRGB());
                 matrices.pop();
             }
