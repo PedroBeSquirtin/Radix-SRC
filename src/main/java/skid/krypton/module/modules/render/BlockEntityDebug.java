@@ -27,9 +27,9 @@ public final class BlockEntityDebug extends Module {
     private final BooleanSetting showBoxes = new BooleanSetting(EncryptedString.of("Show Boxes"), true);
     private final BooleanSetting notifyBase = new BooleanSetting(EncryptedString.of("Notify on Sound"), true);
     
-    private static final Color HIDDEN_BASE = new Color(255, 0, 0, 200);      // Red - Below Y20
-    private static final Color NORMAL_BASE = new Color(255, 200, 50, 200);    // Orange - Above Y20
-    private static final Color PLAYER_SOUND = new Color(0, 255, 0, 200);       // Green - Player
+    private static final Color HIDDEN_BASE = new Color(255, 0, 0, 200);
+    private static final Color NORMAL_BASE = new Color(255, 200, 50, 200);
+    private static final Color PLAYER_SOUND = new Color(0, 255, 0, 200);
     
     private final Map<BlockPos, BaseNode> discoveredBases = new ConcurrentHashMap<>();
     private final Map<BlockPos, Integer> soundCount = new ConcurrentHashMap<>();
@@ -69,8 +69,8 @@ public final class BlockEntityDebug extends Module {
         if (!(event.packet instanceof PlaySoundS2CPacket packet)) return;
         
         try {
-            // Get sound info - different for your MC version
-            String soundPath = packet.getSound().getId().getPath();
+            // FIXED: Different way to get sound path for your MC version
+            String soundPath = packet.getSound().value().toString();
             BlockPos soundPos = new BlockPos((int)packet.getX(), (int)packet.getY(), (int)packet.getZ());
             
             if (mc.player == null) return;
@@ -92,7 +92,7 @@ public final class BlockEntityDebug extends Module {
             String soundType = "";
             int priority = 0;
             
-            // Categorize sounds
+            // Categorize sounds using string contains
             if (soundPath.contains("chest") || soundPath.contains("shulker") || soundPath.contains("barrel")) {
                 color = isHiddenBase ? HIDDEN_BASE : NORMAL_BASE;
                 soundType = "Chest/Container";
@@ -113,7 +113,7 @@ public final class BlockEntityDebug extends Module {
                 soundType = "Beacon";
                 priority = 9;
             }
-            else if (soundPath.contains("player") || soundPath.contains("step") || soundPath.contains("swim")) {
+            else if (soundPath.contains("player") || soundPath.contains("step") || soundPath.contains("swim") || soundPath.contains("walk")) {
                 color = PLAYER_SOUND;
                 soundType = "Player Activity";
                 priority = 10;
@@ -132,6 +132,16 @@ public final class BlockEntityDebug extends Module {
                 color = isHiddenBase ? HIDDEN_BASE : NORMAL_BASE;
                 soundType = "Portal";
                 priority = 8;
+            }
+            else if (soundPath.contains("minecart") || soundPath.contains("rail")) {
+                color = isHiddenBase ? HIDDEN_BASE : NORMAL_BASE;
+                soundType = "Minecart";
+                priority = 5;
+            }
+            else if (soundPath.contains("water") || soundPath.contains("lava")) {
+                color = isHiddenBase ? HIDDEN_BASE : NORMAL_BASE;
+                soundType = "Liquid";
+                priority = 4;
             }
             
             if (color != null) {
@@ -171,7 +181,7 @@ public final class BlockEntityDebug extends Module {
                 }
             }
         } catch (Exception e) {
-            // Ignore errors
+            // Ignore errors silently
         }
     }
     
