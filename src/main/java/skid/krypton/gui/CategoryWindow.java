@@ -1,5 +1,5 @@
 package skid.krypton.gui;
-
+ 
 import net.minecraft.client.gui.DrawContext;
 import skid.krypton.Krypton;
 import skid.krypton.gui.components.ModuleButton;
@@ -7,231 +7,232 @@ import skid.krypton.module.Category;
 import skid.krypton.module.Module;
 import skid.krypton.utils.*;
 import skid.krypton.utils.TextRenderer;
-
+ 
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
-
+ 
 public final class CategoryWindow {
+ 
+    // ── colours ──────────────────────────────────────────────────────────────
+    /** Panel body – matches screenshot dark-navy look */
+    private static final Color PANEL_BG    = new Color(22, 26, 33, 252);
+    /** Header is slightly lighter */
+    private static final Color HEADER_BG   = new Color(28, 33, 42, 255);
+    /** Thin separator under the header */
+    private static final Color SEP_COLOR   = new Color(45, 50, 62, 255);
+    private static final Color TEXT_MAIN   = new Color(225, 228, 235);
+    private static final Color TEXT_DIM    = new Color(110, 118, 135);
+    private static final Color DOT_COLOR   = new Color(120, 128, 145);
+ 
+    // ── category icon glyphs (unicode symbols used as stand-ins) ─────────────
+    private static final String[] ICONS = { "⚔", "☰", "◎", "◈", "❖" };
+ 
+    // ── layout ────────────────────────────────────────────────────────────────
     public List<ModuleButton> moduleButtons;
-    public int x;
-    public int y;
+    public int x, y;
     private final int width;
-    private final int height;
+    private final int height;   // row / header height
     public Color currentColor;
     private final Category category;
     public boolean dragging;
     public boolean extended;
-    private int dragX;
-    private int dragY;
-    private int prevX;
-    private int prevY;
+    private int dragX, dragY;
+    private int prevX, prevY;
     public ClickGUI parent;
-    private float hoverAnimation;
-
-    public CategoryWindow(final int x, final int y, final int width, final int height, final Category category, final ClickGUI parent) {
+    private float hoverAnim;
+    // total animated height of the expanded module list
+    private float expandAnim;
+ 
+    public CategoryWindow(int x, int y, int width, int height, Category category, ClickGUI parent) {
         this.moduleButtons = new ArrayList<>();
-        this.hoverAnimation = 0.0f;
-        this.x = x;
-        this.y = y;
-        this.width = width;
-        this.dragging = false;
-        this.extended = true;
-        this.height = height;
+        this.x = this.prevX = x;
+        this.y = this.prevY = y;
+        this.width    = width;
+        this.height   = height;   // == ClickGUI.HEADER_HEIGHT
         this.category = category;
-        this.parent = parent;
-        this.prevX = x;
-        this.prevY = y;
-
+        this.parent   = parent;
+        this.extended = true;
+        this.expandAnim = 1.0f;
+ 
         final List<Module> modules = new ArrayList<>(Krypton.INSTANCE.getModuleManager().a(category));
-        int offset = height;
-
-        for (Module module : modules) {
-            this.moduleButtons.add(new ModuleButton(this, module, offset));
-            offset += height;
+        int offset = height;   // first button starts right below the header
+        for (Module m : modules) {
+            this.moduleButtons.add(new ModuleButton(this, m, offset));
+            offset += ClickGUI.ROW_HEIGHT;
         }
     }
-
-    public void render(final DrawContext context, final int n, final int n2, final float n3) {
-        // Dark modern background
-        final Color color = new Color(18, 22, 28, 245);
-        if (this.currentColor == null) {
-            this.currentColor = new Color(18, 22, 28, 0);
-        } else {
-            this.currentColor = ColorUtil.a(0.05f, color, this.currentColor);
-        }
-        
-        float n4 = this.isHovered(n, n2) && !this.dragging ? 1.0F : 0.0F;
-        this.hoverAnimation = (float) MathUtil.approachValue(n3 * 0.1f, this.hoverAnimation, n4);
-        
-        final Color a = ColorUtil.a(this.currentColor, new Color(255, 255, 255, 10), this.hoverAnimation);
-        float n5 = this.extended ? 0.0F : 4.0F;
-        float n6 = this.extended ? 0.0F : 4.0F;
-        
-        // Main window background
-        RenderUtils.renderRoundedQuad(context.getMatrices(), a, this.prevX, this.prevY, this.prevX + this.width, this.prevY + this.height, 4.0, 4.0, n5, n6, 50.0);
-        
-        // Category header with accent line
-        final Color mainColor = Utils.getMainColor(255, this.category.ordinal());
-        
-        // Header background
-        RenderUtils.renderRoundedQuad(context.getMatrices(), new Color(25, 30, 38, 255), this.prevX, this.prevY, this.prevX + this.width, this.prevY + this.height, 4.0, 4.0, 0.0, 0.0, 50.0);
-        
-        // Accent line under header
-        context.fill(this.prevX, this.prevY + this.height - 2, this.prevX + this.width, this.prevY + this.height, mainColor.getRGB());
-        
-        final CharSequence f = this.category.name;
-        final int n7 = this.prevX + 12;
-        final int n8 = this.prevY + 8;
-        
-        // Category name
-        TextRenderer.drawString(f, context, n7, n8, new Color(220, 220, 225).getRGB());
-        
-        // Collapse/expand indicator
-        String indicator = this.extended ? "−" : "+";
-        TextRenderer.drawString(indicator, context, this.prevX + this.width - 20, n8, new Color(160, 160, 170).getRGB());
-        
-        this.updateButtons(n3);
-        if (this.extended) {
-            this.renderModuleButtons(context, n, n2, n3);
+ 
+    // ── rendering ─────────────────────────────────────────────────────────────
+ 
+    public void render(final DrawContext ctx, final int mx, final int my, final float delta) {
+ 
+        // lazy-init current color
+        if (this.currentColor == null) this.currentColor = PANEL_BG;
+ 
+        // hover glow
+        final float hoverTarget = (isHovered(mx, my) && !dragging) ? 1f : 0f;
+        hoverAnim += (hoverTarget - hoverAnim) * delta * 0.08f;
+ 
+        // expand animation
+        final float expandTarget = extended ? 1f : 0f;
+        expandAnim += (expandTarget - expandAnim) * delta * 0.18f;
+ 
+        updateButtons(delta);
+ 
+        // -- total content height ---
+        int totalModuleHeight = 0;
+        for (ModuleButton mb : moduleButtons) totalModuleHeight += (int) mb.animation.getAnimation();
+ 
+        final int panelBottom = prevY + height + (int) (totalModuleHeight * expandAnim);
+ 
+        // ---- drop shadow --------------------------------------------------------
+        RenderUtils.renderRoundedQuad(ctx.getMatrices(),
+                new Color(0, 0, 0, 60),
+                prevX + 3, prevY + 4, prevX + width + 3, panelBottom + 4,
+                7.0, 7.0, 7.0, 7.0, 50.0);
+ 
+        // ---- panel background ---------------------------------------------------
+        RenderUtils.renderRoundedQuad(ctx.getMatrices(), PANEL_BG,
+                prevX, prevY, prevX + width, panelBottom,
+                7.0, 7.0, 7.0, 7.0, 50.0);
+ 
+        // ---- header background --------------------------------------------------
+        // Only top corners are rounded; bottom corners are square
+        RenderUtils.renderRoundedQuad(ctx.getMatrices(), HEADER_BG,
+                prevX, prevY, prevX + width, prevY + height,
+                7.0, 7.0, 0.0, 0.0, 50.0);
+ 
+        // ---- thin separator line under header -----------------------------------
+        ctx.fill(prevX, prevY + height - 1, prevX + width, prevY + height, SEP_COLOR.getRGB());
+ 
+        // ---- accent dot on the left edge of header ------------------------------
+        final Color accent = Utils.getMainColor(255, category.ordinal());
+        RenderUtils.renderRoundedQuad(ctx.getMatrices(), accent,
+                prevX + 6, prevY + height / 2 - 4,
+                prevX + 9, prevY + height / 2 + 4,
+                2.0, 2.0, 2.0, 2.0, 50.0);
+ 
+        // ---- category icon ------------------------------------------------------
+        final String icon = ICONS[Math.min(category.ordinal(), ICONS.length - 1)];
+        TextRenderer.drawString(icon, ctx, prevX + 13, prevY + height / 2 - 6, accent.getRGB());
+ 
+        // ---- category name ------------------------------------------------------
+        final int iconW = TextRenderer.getWidth(icon);
+        TextRenderer.drawString(category.name, ctx,
+                prevX + 13 + iconW + 5,
+                prevY + height / 2 - 6,
+                TEXT_MAIN.getRGB());
+ 
+        // ---- three dots (⋯) on the right ----------------------------------------
+        TextRenderer.drawString("...", ctx,
+                prevX + width - 22, prevY + height / 2 - 6,
+                DOT_COLOR.getRGB());
+ 
+        // ---- module buttons (clipped to expanded area) --------------------------
+        if (expandAnim > 0.01f) {
+            renderModuleButtons(ctx, mx, my, delta);
         }
     }
-
-    private void renderModuleButtons(final DrawContext context, final int n, final int n2, final float n3) {
-        for (ModuleButton module : this.moduleButtons) {
-            module.render(context, n, n2, n3);
+ 
+    private void renderModuleButtons(DrawContext ctx, int mx, int my, float delta) {
+        for (ModuleButton mb : moduleButtons) {
+            mb.render(ctx, mx, my, delta);
         }
     }
-
-    public void keyPressed(final int n, final int n2, final int n3) {
-        for (ModuleButton moduleButton : this.moduleButtons) {
-            moduleButton.keyPressed(n, n2, n3);
-        }
+ 
+    // ── input ─────────────────────────────────────────────────────────────────
+ 
+    public void keyPressed(int key, int scan, int mods) {
+        for (ModuleButton mb : moduleButtons) mb.keyPressed(key, scan, mods);
     }
-
+ 
     public void onGuiClose() {
         this.currentColor = null;
-        for (ModuleButton moduleButton : this.moduleButtons) {
-            moduleButton.onGuiClose();
-        }
         this.dragging = false;
+        for (ModuleButton mb : moduleButtons) mb.onGuiClose();
     }
-
-    public void mouseClicked(final double x, final double y, final int button) {
-        if (this.isHovered(x, y)) {
+ 
+    public void mouseClicked(double mx, double my, int button) {
+        if (isHovered(mx, my)) {
             switch (button) {
                 case 0:
-                    if (!this.parent.isDraggingAlready()) {
-                        this.dragging = true;
-                        this.dragX = (int) (x - this.x);
-                        this.dragY = (int) (y - this.y);
+                    if (!parent.isDraggingAlready()) {
+                        dragging = true;
+                        dragX = (int)(mx - x);
+                        dragY = (int)(my - y);
                     }
                     break;
                 case 1:
-                    this.extended = !this.extended;
-                    break;
-                default:
+                    extended = !extended;
                     break;
             }
         }
-        if (this.extended) {
-            for (ModuleButton moduleButton : this.moduleButtons) {
-                moduleButton.mouseClicked(x, y, button);
-            }
+        // three-dots area: right-click anywhere on header toggles too (handled above)
+        // clicks on module buttons
+        if (extended || expandAnim > 0.05f) {
+            for (ModuleButton mb : moduleButtons) mb.mouseClicked(mx, my, button);
         }
     }
-
-    public void mouseDragged(final double n, final double n2, final int n3, final double n4, final double n5) {
-        if (this.extended) {
-            for (ModuleButton moduleButton : this.moduleButtons) {
-                moduleButton.mouseDragged(n, n2, n3, n4, n5);
-            }
+ 
+    public void mouseDragged(double mx, double my, int button, double dx, double dy) {
+        if (extended) {
+            for (ModuleButton mb : moduleButtons) mb.mouseDragged(mx, my, button, dx, dy);
         }
     }
-
-    public void updateButtons(final float n) {
-        int height = this.height;
-        for (final ModuleButton next : this.moduleButtons) {
-            final Animation animation = next.animation;
-            double n2;
-            if (next.extended) {
-                n2 = this.height * (next.settings.size() + 1);
-            } else {
-                n2 = this.height;
-            }
-            animation.animate(0.5 * n, n2);
-            final double animation2 = next.animation.getAnimation();
-            next.offset = height;
-            height += (int) animation2;
+ 
+    public void mouseReleased(double mx, double my, int button) {
+        if (button == 0 && dragging) dragging = false;
+        for (ModuleButton mb : moduleButtons) mb.mouseReleased(mx, my, button);
+    }
+ 
+    public void mouseScrolled(double mx, double my, double hScroll, double vScroll) {
+        prevX = x;
+        prevY = y;
+        prevY += (int)(vScroll * 20.0);
+        y     += (int)(vScroll * 20.0);
+    }
+ 
+    // ── animation helpers ─────────────────────────────────────────────────────
+ 
+    public void updateButtons(float delta) {
+        int runningHeight = height;
+        for (ModuleButton mb : moduleButtons) {
+            final double targetH = mb.extended
+                    ? height * (mb.settings.size() + 1)
+                    : ClickGUI.ROW_HEIGHT;
+            mb.animation.animate(0.5 * delta, targetH);
+            mb.offset = runningHeight;
+            runningHeight += (int) mb.animation.getAnimation();
         }
     }
-
-    public void mouseReleased(final double n, final double n2, final int n3) {
-        if (n3 == 0 && this.dragging) {
-            this.dragging = false;
+ 
+    public void updatePosition(double mx, double my, float delta) {
+        prevX = x;
+        prevY = y;
+        if (dragging) {
+            final double targetX = isHovered(mx, my) ? x : prevX;
+            final double targetY = isHovered(mx, my) ? y : prevY;
+            x = (int) MathUtil.approachValue(0.3f * delta, targetX, mx - dragX);
+            y = (int) MathUtil.approachValue(0.3f * delta, targetY, my - dragY);
         }
-        for (ModuleButton moduleButton : this.moduleButtons) {
-            moduleButton.mouseReleased(n, n2, n3);
-        }
     }
-
-    public void mouseScrolled(final double n, final double n2, final double n3, final double n4) {
-        this.prevX = this.x;
-        this.prevY = this.y;
-        this.prevY += (int) (n4 * 20.0);
-        this.setY((int) (this.y + n4 * 20.0));
+ 
+    // ── accessors ─────────────────────────────────────────────────────────────
+ 
+    public int getX()      { return prevX; }
+    public int getY()      { return prevY; }
+    public void setX(int x){ this.x = x; }
+    public void setY(int y){ this.y = y; }
+    public int getWidth()  { return width; }
+    public int getHeight() { return height; }
+ 
+    public boolean isHovered(double mx, double my) {
+        return mx > x && mx < x + width && my > y && my < y + height;
     }
-
-    public int getX() {
-        return this.prevX;
-    }
-
-    public int getY() {
-        return this.prevY;
-    }
-
-    public void setY(final int y) {
-        this.y = y;
-    }
-
-    public void setX(final int x) {
-        this.x = x;
-    }
-
-    public int getWidth() {
-        return this.width;
-    }
-
-    public int getHeight() {
-        return this.height;
-    }
-
-    public boolean isHovered(final double n, final double n2) {
-        return n > this.x && n < this.x + this.width && n2 > this.y && n2 < this.y + this.height;
-    }
-
-    public boolean isPrevHovered(final double n, final double n2) {
-        return n > this.prevX && n < this.prevX + this.width && n2 > this.prevY && n2 < this.prevY + this.height;
-    }
-
-    public void updatePosition(final double n, final double n2, final float n3) {
-        this.prevX = this.x;
-        this.prevY = this.y;
-        if (this.dragging) {
-            double n4;
-            if (this.isHovered(n, n2)) {
-                n4 = this.x;
-            } else {
-                n4 = this.prevX;
-            }
-            this.x = (int) MathUtil.approachValue(0.3f * n3, n4, n - this.dragX);
-            double n5;
-            if (this.isHovered(n, n2)) {
-                n5 = this.y;
-            } else {
-                n5 = this.prevY;
-            }
-            this.y = (int) MathUtil.approachValue(0.3f * n3, n5, n2 - this.dragY);
-        }
+ 
+    public boolean isPrevHovered(double mx, double my) {
+        return mx > prevX && mx < prevX + width && my > prevY && my < prevY + height;
     }
 }
+ 
