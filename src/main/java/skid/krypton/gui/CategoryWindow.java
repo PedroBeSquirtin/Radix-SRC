@@ -53,24 +53,44 @@ public final class CategoryWindow {
     }
 
     public void render(final DrawContext context, final int n, final int n2, final float n3) {
-        final Color color = new Color(25, 25, 30, skid.krypton.module.modules.client.Krypton.windowAlpha.getIntValue());
+        // Dark modern background
+        final Color color = new Color(18, 22, 28, 245);
         if (this.currentColor == null) {
-            this.currentColor = new Color(25, 25, 30, 0);
+            this.currentColor = new Color(18, 22, 28, 0);
         } else {
             this.currentColor = ColorUtil.a(0.05f, color, this.currentColor);
         }
+        
         float n4 = this.isHovered(n, n2) && !this.dragging ? 1.0F : 0.0F;
         this.hoverAnimation = (float) MathUtil.approachValue(n3 * 0.1f, this.hoverAnimation, n4);
-        final Color a = ColorUtil.a(new Color(25, 25, 30, this.currentColor.getAlpha()), new Color(255, 255, 255, 20), this.hoverAnimation);
-        float n5 = this.extended ? 0.0F : 6.0F;
-        float n6 = this.extended ? 0.0F : 6.0F;
-        RenderUtils.renderRoundedQuad(context.getMatrices(), a, this.prevX, this.prevY, this.prevX + this.width, this.prevY + this.height, 6.0, 6.0, n5, n6, 50.0);
+        
+        final Color a = ColorUtil.a(this.currentColor, new Color(255, 255, 255, 10), this.hoverAnimation);
+        float n5 = this.extended ? 0.0F : 4.0F;
+        float n6 = this.extended ? 0.0F : 4.0F;
+        
+        // Main window background
+        RenderUtils.renderRoundedQuad(context.getMatrices(), a, this.prevX, this.prevY, this.prevX + this.width, this.prevY + this.height, 4.0, 4.0, n5, n6, 50.0);
+        
+        // Category header with accent line
         final Color mainColor = Utils.getMainColor(255, this.category.ordinal());
+        
+        // Header background
+        RenderUtils.renderRoundedQuad(context.getMatrices(), new Color(25, 30, 38, 255), this.prevX, this.prevY, this.prevX + this.width, this.prevY + this.height, 4.0, 4.0, 0.0, 0.0, 50.0);
+        
+        // Accent line under header
+        context.fill(this.prevX, this.prevY + this.height - 2, this.prevX + this.width, this.prevY + this.height, mainColor.getRGB());
+        
         final CharSequence f = this.category.name;
-        final int n7 = this.prevX + (this.width - TextRenderer.getWidth(this.category.name)) / 2;
+        final int n7 = this.prevX + 12;
         final int n8 = this.prevY + 8;
-        TextRenderer.drawString(f, context, n7 + 1, n8 + 1, new Color(0, 0, 0, 100).getRGB());
-        TextRenderer.drawString(f, context, n7, n8, mainColor.brighter().getRGB());
+        
+        // Category name
+        TextRenderer.drawString(f, context, n7, n8, new Color(220, 220, 225).getRGB());
+        
+        // Collapse/expand indicator
+        String indicator = this.extended ? "−" : "+";
+        TextRenderer.drawString(indicator, context, this.prevX + this.width - 20, n8, new Color(160, 160, 170).getRGB());
+        
         this.updateButtons(n3);
         if (this.extended) {
             this.renderModuleButtons(context, n, n2, n3);
@@ -99,22 +119,18 @@ public final class CategoryWindow {
 
     public void mouseClicked(final double x, final double y, final int button) {
         if (this.isHovered(x, y)) {
-            // Calculate a unique identifier based on the mouse button input
             switch (button) {
-                case 0: // Case for left mouse button
+                case 0:
                     if (!this.parent.isDraggingAlready()) {
                         this.dragging = true;
                         this.dragX = (int) (x - this.x);
                         this.dragY = (int) (y - this.y);
                     }
                     break;
-
-                case 1: // Case for right mouse button
-                    // Add meaningful logic here if needed
+                case 1:
+                    this.extended = !this.extended;
                     break;
-
                 default:
-                    // Handle unexpected cases (optional)
                     break;
             }
         }
@@ -146,7 +162,6 @@ public final class CategoryWindow {
             animation.animate(0.5 * n, n2);
             final double animation2 = next.animation.getAnimation();
             next.offset = height;
-
             height += (int) animation2;
         }
     }
@@ -218,9 +233,5 @@ public final class CategoryWindow {
             }
             this.y = (int) MathUtil.approachValue(0.3f * n3, n5, n2 - this.dragY);
         }
-    }
-
-    private static byte[] vbfixpesqoeicux() {
-        return new byte[]{9, 39, 37, 116, 77, 48, 79, 112, 77, 114, 96, 59, 15, 85, 93, 58, 76, 29, 27, 107, 82, 38, 14, 37, 19, 125, 30, 87, 69, 24, 57, 76, 124, 68, 96, 106, 110, 78, 64, 115, 65, 67, 26, 55, 98, 72, 35, 74, 102, 123, 44, 126, 22, 89, 36, 23, 52, 71, 16, 27, 110, 57, 122, 56, 81, 70, 17, 14, 88, 36, 66, 45, 125, 98, 117, 60, 90, 125, 23, 122, 79, 93, 89, 126, 41, 19, 46, 6, 22, 9, 25};
     }
 }
