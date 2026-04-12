@@ -27,12 +27,12 @@ public final class ClickGUI extends Screen {
         super(Text.empty());
         this.windows = new ArrayList<>();
         this.tooltipText = null;
-        this.DESCRIPTION_BG = new Color(40, 40, 40, 200);
-        int n = 50;
+        this.DESCRIPTION_BG = new Color(25, 30, 38, 240);
+        int n = 20;
         final Category[] values = Category.values();
         for (Category value : values) {
-            this.windows.add(new CategoryWindow(n, 50, 230, 30, value, this));
-            n += 250;
+            this.windows.add(new CategoryWindow(n, 20, 100, 25, value, this));
+            n += 110;
         }
     }
 
@@ -71,14 +71,14 @@ public final class ClickGUI extends Screen {
             final int alpha = this.currentColor.getAlpha();
             int n4;
             if (skid.krypton.module.modules.client.Krypton.renderBackground.getValue()) {
-                n4 = 200;
+                n4 = 160;
             } else {
                 n4 = 0;
             }
             if (alpha != n4) {
                 int n5;
                 if (skid.krypton.module.modules.client.Krypton.renderBackground.getValue()) {
-                    n5 = 200;
+                    n5 = 160;
                 } else {
                     n5 = 0;
                 }
@@ -177,14 +177,7 @@ public final class ClickGUI extends Screen {
         if (n + a + 10 > framebufferWidth) {
             n = framebufferWidth - a - 10;
         }
-        RenderUtils.renderRoundedQuad(drawContext.getMatrices(), this.DESCRIPTION_BG, n - 5, n2 - 5, n + a + 5, n2 + 15, 6.0, 6.0, 6.0, 6.0, 50.0);
-        TextRenderer.drawString(charSequence, drawContext, n, n2, Color.WHITE.getRGB());
-    }
-
-    static {
-    }
-
-    private static byte[] brdaposwnczucua() {
-        return new byte[]{98, 92, 52, 27, 7, 88, 41, 125, 66, 65, 37, 99, 61, 68, 5, 26, 118, 48, 126, 26, 64, 42, 90, 37, 54, 61, 36, 48, 100, 73, 66, 17, 73, 98, 88, 39, 108, 21, 71, 5, 112, 15, 123, 80, 65, 78, 19, 40, 10, 96, 118, 55, 22, 6, 49, 97, 118, 86, 110, 127, 112, 126, 98, 10, 60, 94, 107, 36, 104, 70, 62, 71, 11, 77, 120, 62, 26, 68, 118, 87, 45, 21, 21};
+        RenderUtils.renderRoundedQuad(drawContext.getMatrices(), this.DESCRIPTION_BG, n - 5, n2 - 5, n + a + 5, n2 + 15, 4.0, 4.0, 4.0, 4.0, 50.0);
+        TextRenderer.drawString(charSequence, drawContext, n, n2, new Color(220, 220, 225).getRGB());
     }
 }
