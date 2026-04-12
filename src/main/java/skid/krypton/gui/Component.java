@@ -1,5 +1,5 @@
 package skid.krypton.gui;
-
+ 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import skid.krypton.gui.components.ModuleButton;
@@ -7,103 +7,80 @@ import skid.krypton.module.setting.Setting;
 import skid.krypton.utils.ColorUtil;
 import skid.krypton.utils.RenderUtils;
 import skid.krypton.utils.TextRenderer;
-
+ 
 import java.awt.*;
-
+ 
 public abstract class Component {
     public MinecraftClient mc;
-    public ModuleButton parent;
-    public Setting setting;
-    public int offset;
-    public Color currentColor;
-    public boolean mouseOver;
-    int x;
-    int y;
-    int width;
-    int height;
-
-    public Component(final ModuleButton parent, final Setting setting, final int offset) {
-        this.mc = MinecraftClient.getInstance();
-        this.parent = parent;
+    public ModuleButton    parent;
+    public Setting         setting;
+    public int             offset;
+    public Color           currentColor;
+    public boolean         mouseOver;
+    int x, y, width, height;
+ 
+    public Component(ModuleButton parent, Setting setting, int offset) {
+        this.mc      = MinecraftClient.getInstance();
+        this.parent  = parent;
         this.setting = setting;
-        this.offset = offset;
-        this.x = this.parentX();
-        this.y = this.parentY() + this.parentOffset() + offset;
-        this.width = this.parentX() + this.parentWidth();
-        this.height = this.parentY() + this.parentOffset() + offset + this.parentHeight();
+        this.offset  = offset;
+        this.x       = parentX();
+        this.y       = parentY() + parentOffset() + offset;
+        this.width   = parentX() + parentWidth();
+        this.height  = parentY() + parentOffset() + offset + parentHeight();
     }
-
-    public int parentX() {
-        return this.parent.parent.getX();
+ 
+    public int parentX()      { return parent.parent.getX(); }
+    public int parentY()      { return parent.parent.getY(); }
+    public int parentWidth()  { return parent.parent.getWidth(); }
+    public int parentHeight() { return parent.parent.getHeight(); }
+    public int parentOffset() { return parent.offset; }
+ 
+    public void render(DrawContext ctx, int mx, int my, float delta) {
+        mouseOver = isHovered(mx, my);
+        x      = parentX();
+        y      = parentY() + parentOffset() + offset;
+        width  = parentX() + parentWidth();
+        height = parentY() + parentOffset() + offset + parentHeight();
+        // draw base row background (dark, slightly lighter than panel)
+        ctx.fill(x, y, width, height,
+                (currentColor != null ? currentColor : new Color(25, 29, 37, 200)).getRGB());
     }
-
-    public int parentY() {
-        return this.parent.parent.getY();
-    }
-
-    public int parentWidth() {
-        return this.parent.parent.getWidth();
-    }
-
-    public int parentHeight() {
-        return this.parent.parent.getHeight();
-    }
-
-    public int parentOffset() {
-        return this.parent.offset;
-    }
-
-    public void render(final DrawContext drawContext, final int n, final int n2, final float n3) {
-        this.updateMouseOver(n, n2);
-        this.x = this.parentX();
-        this.y = this.parentY() + this.parentOffset() + this.offset;
-        this.width = this.parentX() + this.parentWidth();
-        this.height = this.parentY() + this.parentOffset() + this.offset + this.parentHeight();
-        drawContext.fill(this.x, this.y, this.width, this.height, this.currentColor.getRGB());
-    }
-
-    private void updateMouseOver(final double n, final double n2) {
-        this.mouseOver = this.isHovered(n, n2);
-    }
-
-    public void renderDescription(final DrawContext drawContext, final int n, final int n2, final float n3) {
-        if (this.isHovered(n, n2) && this.setting.getDescription() != null && !this.parent.parent.dragging) {
-            final CharSequence s = this.setting.getDescription();
-            final int a = TextRenderer.getWidth(s);
-            final int n4 = this.mc.getWindow().getWidth() / 2 - a / 2;
-            RenderUtils.renderRoundedQuad(drawContext.getMatrices(), new Color(100, 100, 100, 100), n4 - 5, this.mc.getWindow().getHeight() / 2 + 294, n4 + a + 5, this.mc.getWindow().getHeight() / 2 + 318, 3.0, 10.0);
-            TextRenderer.drawString(s, drawContext, n4, this.mc.getWindow().getHeight() / 2 + 300, Color.WHITE.getRGB());
+ 
+    public void renderDescription(DrawContext ctx, int mx, int my, float delta) {
+        if (isHovered(mx, my) && setting.getDescription() != null && !parent.parent.dragging) {
+            final CharSequence desc = setting.getDescription();
+            final int dw = TextRenderer.getWidth(desc);
+            final int dx = mc.getWindow().getWidth() / 2 - dw / 2;
+            final int dy = mc.getWindow().getHeight() / 2 + 294;
+            RenderUtils.renderRoundedQuad(ctx.getMatrices(),
+                    new Color(20, 24, 32, 210),
+                    dx - 6, dy, dx + dw + 6, dy + 24,
+                    3.0, 10.0);
+            TextRenderer.drawString(desc, ctx, dx, dy + 6, Color.WHITE.getRGB());
         }
     }
-
-    public void onGuiClose() {
-        this.currentColor = null;
+ 
+    public void onGuiClose()                                      { currentColor = null; }
+    public void keyPressed(int key, int scan, int mods)           {}
+    public void mouseClicked(double mx, double my, int btn)       {}
+    public void mouseReleased(double mx, double my, int btn)      {}
+    public void mouseDragged(double mx, double my, int btn, double dx, double dy) {}
+ 
+    public boolean isHovered(double mx, double my) {
+        return mx > parentX()
+                && mx < parentX() + parentWidth()
+                && my > offset + parentOffset() + parentY()
+                && my < offset + parentOffset() + parentY() + parentHeight();
     }
-
-    public void keyPressed(final int n, final int n2, final int n3) {
-    }
-
-    public boolean isHovered(final double n, final double n2) {
-        return n > this.parentX() && n < this.parentX() + this.parentWidth() && n2 > this.offset + this.parentOffset() + this.parentY() && n2 < this.offset + this.parentOffset() + this.parentY() + this.parentHeight();
-    }
-
+ 
     public void onUpdate() {
-        if (this.currentColor == null) {
-            this.currentColor = new Color(0, 0, 0, 0);
-        } else {
-            this.currentColor = new Color(0, 0, 0, this.currentColor.getAlpha());
-        }
-        if (this.currentColor.getAlpha() != 120) {
-            this.currentColor = ColorUtil.a(0.05f, 120, this.currentColor);
-        }
-    }
-
-    public void mouseClicked(final double n, final double n2, final int n3) {
-    }
-
-    public void mouseReleased(final double n, final double n2, final int n3) {
-    }
-
-    public void mouseDragged(final double n, final double n2, final int n3, final double n4, final double n5) {
+        // Row background: near-transparent dark
+        if (currentColor == null)
+            currentColor = new Color(24, 28, 37, 0);
+        else
+            currentColor = new Color(24, 28, 37, currentColor.getAlpha());
+        if (currentColor.getAlpha() != 115)
+            currentColor = ColorUtil.a(0.05f, 115, currentColor);
     }
 }
