@@ -106,9 +106,9 @@ public final class ModuleButton {
  
         // ---- settings arrow (if module has settings) ----------------------------
         if (!module.getSettings().isEmpty()) {
-            final String arrow = extended ? "▾" : "▸";
+            final String arrow = extended ? "v" : ">";
             TextRenderer.drawString(arrow, ctx,
-                    x + w - TOGGLE_W - 24, rowY + h / 2 - 5,
+                    x + w - TOGGLE_W - 22, rowY + h / 2 - 5,
                     new Color(90, 98, 115).getRGB());
         }
  
@@ -279,4 +279,3 @@ public final class ModuleButton {
                 && my < parent.getY() + offset + ClickGUI.ROW_HEIGHT;
     }
 }
- 
