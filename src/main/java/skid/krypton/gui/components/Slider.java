@@ -1,213 +1,200 @@
 package skid.krypton.gui.components;
-
+ 
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.math.MathHelper;
 import skid.krypton.gui.Component;
 import skid.krypton.module.setting.Setting;
 import skid.krypton.module.setting.MinMaxSetting;
-import skid.krypton.utils.ColorUtil;
-import skid.krypton.utils.Utils;
-import skid.krypton.utils.MathUtil;
-import skid.krypton.utils.RenderUtils;
+import skid.krypton.utils.*;
 import skid.krypton.utils.TextRenderer;
-
+ 
 import java.awt.*;
-
+ 
 public final class Slider extends Component {
-    private boolean draggingMin;
-    private boolean draggingMax;
-    private double offsetMinX;
-    private double offsetMaxX;
-    public double lerpedOffsetMinX;
-    public double lerpedOffsetMaxX;
-    private float hoverAnimation;
+ 
+    private static final Color TEXT_COLOR  = new Color(210, 215, 225);
+    private static final Color HOVER_COLOR = new Color(255, 255, 255, 10);
+    private static final Color TRACK_BG    = new Color(42, 48, 60);
+    private static final Color THUMB_COLOR = new Color(240, 242, 248);
+    private static final Color BADGE_BG    = new Color(32, 37, 48, 220);
+ 
+    private boolean draggingMin, draggingMax;
+    private double  offsetMinX, offsetMaxX;
+    public double   lerpedOffsetMinX, lerpedOffsetMaxX;
+    private float   hoverAnim;
     private final MinMaxSetting setting;
-    public Color accentColor1;
-    public Color accentColor2;
-    private static final Color TEXT_COLOR;
-    private static final Color HOVER_COLOR;
-    private static final Color TRACK_BG_COLOR;
-    private static final Color THUMB_COLOR;
-    private static final float TRACK_HEIGHT = 4.0f;
-    private static final float TRACK_RADIUS = 2.0f;
-    private static final float THUMB_SIZE = 8.0f;
-    private static final float ANIMATION_SPEED = 0.25f;
-
-    public Slider(final ModuleButton moduleButton, final Setting setting, final int n) {
-        super(moduleButton, setting, n);
-        this.hoverAnimation = 0.0f;
-        this.setting = (MinMaxSetting) setting;
-        this.lerpedOffsetMinX = this.parentX();
-        this.lerpedOffsetMaxX = this.parentX() + this.parentWidth();
+    public Color    accentColor1, accentColor2;
+ 
+    public Slider(ModuleButton parent, Setting setting, int offset) {
+        super(parent, setting, offset);
+        this.setting          = (MinMaxSetting) setting;
+        this.lerpedOffsetMinX = parentX();
+        this.lerpedOffsetMaxX = parentX() + parentWidth();
     }
-
-    @Override
-    public void render(final DrawContext drawContext, final int n, final int n2, final float n3) {
-        super.render(drawContext, n, n2, n3);
-        final MatrixStack matrices = drawContext.getMatrices();
-        this.updateAnimations(n, n2, n3);
-        this.offsetMinX = (this.setting.getCurrentMin() - this.setting.getMinValue()) / (this.setting.getMaxValue() - this.setting.getMinValue()) * (this.parentWidth() - 10) + 5.0;
-        this.offsetMaxX = (this.setting.getCurrentMax() - this.setting.getMinValue()) / (this.setting.getMaxValue() - this.setting.getMinValue()) * (this.parentWidth() - 10) + 5.0;
-        this.lerpedOffsetMinX = MathUtil.approachValue((float) (0.5 * n3), this.lerpedOffsetMinX, this.offsetMinX);
-        this.lerpedOffsetMaxX = MathUtil.approachValue((float) (0.5 * n3), this.lerpedOffsetMaxX, this.offsetMaxX);
-        if (!this.parent.parent.dragging) {
-            drawContext.fill(this.parentX(), this.parentY() + this.parentOffset() + this.offset, this.parentX() + this.parentWidth(), this.parentY() + this.parentOffset() + this.offset + this.parentHeight(), new Color(Slider.HOVER_COLOR.getRed(), Slider.HOVER_COLOR.getGreen(), Slider.HOVER_COLOR.getBlue(), (int) (Slider.HOVER_COLOR.getAlpha() * this.hoverAnimation)).getRGB());
-        }
-        final int n4 = this.parentY() + this.offset + this.parentOffset() + 25;
-        final int n5 = this.parentX() + 5;
-        RenderUtils.renderRoundedQuad(matrices, Slider.TRACK_BG_COLOR, n5, n4, n5 + (this.parentWidth() - 10), n4 + 4.0f, 2.0, 2.0, 2.0, 2.0, 50.0);
-        if (this.lerpedOffsetMaxX > this.lerpedOffsetMinX) {
-            RenderUtils.renderRoundedQuad(matrices, this.accentColor1, n5 + this.lerpedOffsetMinX - 5.0, n4, n5 + this.lerpedOffsetMaxX - 5.0, n4 + 4.0f, 2.0, 2.0, 2.0, 2.0, 50.0);
-        }
-        final String displayText = this.getDisplayText();
-        TextRenderer.drawString(this.setting.getName(), drawContext, this.parentX() + 5, this.parentY() + this.parentOffset() + this.offset + 9, Slider.TEXT_COLOR.getRGB());
-        TextRenderer.drawString(displayText, drawContext, this.parentX() + this.parentWidth() - TextRenderer.getWidth(displayText) - 5, this.parentY() + this.parentOffset() + this.offset + 9, this.accentColor1.getRGB());
-        final float n6 = n4 + 2.0f - 4.0f;
-        RenderUtils.renderRoundedQuad(matrices, Slider.THUMB_COLOR, (float) (n5 + this.lerpedOffsetMinX - 5.0 - 4.0), n6, (float) (n5 + this.lerpedOffsetMinX - 5.0 + 4.0), n6 + 8.0f, 4.0, 4.0, 4.0, 4.0, 50.0);
-        RenderUtils.renderRoundedQuad(matrices, Slider.THUMB_COLOR, (float) (n5 + this.lerpedOffsetMaxX - 5.0 - 4.0), n6, (float) (n5 + this.lerpedOffsetMaxX - 5.0 + 4.0), n6 + 8.0f, 4.0, 4.0, 4.0, 4.0, 50.0);
-    }
-
-    private void updateAnimations(final int n, final int n2, final float n3) {
-        float n4;
-        if (this.isHovered(n, n2) && !this.parent.parent.dragging) {
-            n4 = 1.0f;
-        } else {
-            n4 = 0.0f;
-        }
-        this.hoverAnimation = (float) MathUtil.exponentialInterpolate(this.hoverAnimation, n4, 0.25, n3 * 0.05f);
-    }
-
-    private String getDisplayText() {
-        if (this.setting.getCurrentMin() == this.setting.getCurrentMax()) {
-            return this.formatValue(this.setting.getCurrentMin());
-        }
-        return this.formatValue(this.setting.getCurrentMin()) + " - " + this.formatValue(this.setting.getCurrentMax());
-    }
-
-    private String formatValue(final double d) {
-        final double m = this.setting.getStep();
-        if (m == 0.1) {
-            return String.format("%.1f", d);
-        }
-        if (m == 0.01) {
-            return String.format("%.2f", d);
-        }
-        if (m == 0.001) {
-            return String.format("%.3f", d);
-        }
-        if (m >= 1.0) {
-            return String.format("%.0f", d);
-        }
-        return String.valueOf(d);
-    }
-
-    @Override
-    public void mouseClicked(final double n, final double n2, final int n3) {
-        if (n3 == 0 && this.isHovered(n, n2)) {
-            if (this.isHoveredMin(n, n2)) {
-                this.draggingMin = true;
-                this.slideMin(n);
-            } else if (this.isHoveredMax(n, n2)) {
-                this.draggingMax = true;
-                this.slideMax(n);
-            } else if (n < this.parentX() + this.offsetMinX) {
-                this.draggingMin = true;
-                this.slideMin(n);
-            } else if (n > this.parentX() + this.offsetMaxX) {
-                this.draggingMax = true;
-                this.slideMax(n);
-            } else if (n - (this.parentX() + this.offsetMinX) < this.parentX() + this.offsetMaxX - n) {
-                this.draggingMin = true;
-                this.slideMin(n);
-            } else {
-                this.draggingMax = true;
-                this.slideMax(n);
-            }
-        }
-        super.mouseClicked(n, n2, n3);
-    }
-
-    @Override
-    public void keyPressed(final int n, final int n2, final int n3) {
-        if (this.mouseOver && n == 259) {
-            this.setting.setCurrentMax(this.setting.getDefaultMax());
-            this.setting.setCurrentMin(this.setting.getDefaultMin());
-        }
-        super.keyPressed(n, n2, n3);
-    }
-
-    public boolean isHoveredMin(final double n, final double n2) {
-        return this.isHovered(n, n2) && n > this.parentX() + this.offsetMinX - 8.0 && n < this.parentX() + this.offsetMinX + 8.0;
-    }
-
-    public boolean isHoveredMax(final double n, final double n2) {
-        return this.isHovered(n, n2) && n > this.parentX() + this.offsetMaxX - 8.0 && n < this.parentX() + this.offsetMaxX + 8.0;
-    }
-
-    @Override
-    public void mouseReleased(final double n, final double n2, final int n3) {
-        if (n3 == 0) {
-            this.draggingMin = false;
-            this.draggingMax = false;
-        }
-        super.mouseReleased(n, n2, n3);
-    }
-
-    @Override
-    public void mouseDragged(final double n, final double n2, final int n3, final double n4, final double n5) {
-        if (this.draggingMin) {
-            this.slideMin(n);
-        }
-        if (this.draggingMax) {
-            this.slideMax(n);
-        }
-        super.mouseDragged(n, n2, n3, n4, n5);
-    }
-
-    @Override
-    public void onGuiClose() {
-        this.accentColor1 = null;
-        this.accentColor2 = null;
-        this.hoverAnimation = 0.0f;
-        super.onGuiClose();
-    }
-
-    private void slideMin(final double n) {
-        this.setting.setCurrentMin(Math.min(MathUtil.roundToNearest(MathHelper.clamp((n - (this.parentX() + 5)) / (this.parentWidth() - 10), 0.0, 1.0) * (this.setting.getMaxValue() - this.setting.getMinValue()) + this.setting.getMinValue(), this.setting.getStep()), this.setting.getCurrentMax()));
-    }
-
-    private void slideMax(final double n) {
-        this.setting.setCurrentMax(Math.max(MathUtil.roundToNearest(MathHelper.clamp((n - (this.parentX() + 5)) / (this.parentWidth() - 10), 0.0, 1.0) * (this.setting.getMaxValue() - this.setting.getMinValue()) + this.setting.getMinValue(), this.setting.getStep()), this.setting.getCurrentMin()));
-    }
-
+ 
     @Override
     public void onUpdate() {
-        final Color mainColor = Utils.getMainColor(255, this.parent.settings.indexOf(this));
-        final Color mainColor2 = Utils.getMainColor(255, this.parent.settings.indexOf(this) + 1);
-        if (this.accentColor1 == null) {
-            this.accentColor1 = new Color(mainColor.getRed(), mainColor.getGreen(), mainColor.getBlue(), 0);
-        } else {
-            this.accentColor1 = new Color(mainColor.getRed(), mainColor.getGreen(), mainColor.getBlue(), this.accentColor1.getAlpha());
-        }
-        if (this.accentColor2 == null) {
-            this.accentColor2 = new Color(mainColor2.getRed(), mainColor2.getGreen(), mainColor2.getBlue(), 0);
-        } else {
-            this.accentColor2 = new Color(mainColor2.getRed(), mainColor2.getGreen(), mainColor2.getBlue(), this.accentColor2.getAlpha());
-        }
-        if (this.accentColor1.getAlpha() != 255) {
-            this.accentColor1 = ColorUtil.a(0.05f, 255, this.accentColor1);
-        }
-        if (this.accentColor2.getAlpha() != 255) {
-            this.accentColor2 = ColorUtil.a(0.05f, 255, this.accentColor2);
-        }
+        final Color mc  = Utils.getMainColor(255, parent.settings.indexOf(this));
+        final Color mc2 = Utils.getMainColor(255, parent.settings.indexOf(this) + 1);
+        accentColor1 = animColor(accentColor1, mc);
+        accentColor2 = animColor(accentColor2, mc2);
         super.onUpdate();
     }
-
-    static {
-        TEXT_COLOR = new Color(230, 230, 230);
-        HOVER_COLOR = new Color(255, 255, 255, 20);
-        TRACK_BG_COLOR = new Color(60, 60, 65);
-        THUMB_COLOR = new Color(240, 240, 240);
+ 
+    private Color animColor(Color cur, Color target) {
+        if (cur == null) return new Color(target.getRed(), target.getGreen(), target.getBlue(), 0);
+        cur = new Color(target.getRed(), target.getGreen(), target.getBlue(), cur.getAlpha());
+        if (cur.getAlpha() != 255) cur = ColorUtil.a(0.05f, 255, cur);
+        return cur;
+    }
+ 
+    @Override
+    public void render(DrawContext ctx, int mx, int my, float delta) {
+        super.render(ctx, mx, my, delta);
+        final MatrixStack ms = ctx.getMatrices();
+        updateAnimations(mx, my, delta);
+ 
+        offsetMinX = (setting.getCurrentMin() - setting.getMinValue()) / (setting.getMaxValue() - setting.getMinValue()) * (parentWidth() - 10) + 5.0;
+        offsetMaxX = (setting.getCurrentMax() - setting.getMinValue()) / (setting.getMaxValue() - setting.getMinValue()) * (parentWidth() - 10) + 5.0;
+        lerpedOffsetMinX = MathUtil.approachValue((float)(0.5 * delta), lerpedOffsetMinX, offsetMinX);
+        lerpedOffsetMaxX = MathUtil.approachValue((float)(0.5 * delta), lerpedOffsetMaxX, offsetMaxX);
+ 
+        if (!parent.parent.dragging && hoverAnim > 0.01f)
+            ctx.fill(parentX(), parentY() + parentOffset() + offset,
+                    parentX() + parentWidth(), parentY() + parentOffset() + offset + parentHeight(),
+                    new Color(255, 255, 255, (int)(10 * hoverAnim)).getRGB());
+ 
+        final int trackY = parentY() + offset + parentOffset() + 24;
+        final int trackX = parentX() + 5;
+        final int trackW = parentWidth() - 10;
+ 
+        // track background
+        RenderUtils.renderRoundedQuad(ms, TRACK_BG,
+                trackX, trackY, trackX + trackW, trackY + 4,
+                2.0, 2.0, 2.0, 2.0, 50.0);
+ 
+        // filled range
+        if (lerpedOffsetMaxX > lerpedOffsetMinX && accentColor1 != null) {
+            RenderUtils.renderRoundedQuad(ms, accentColor1,
+                    trackX + lerpedOffsetMinX - 5.0, trackY,
+                    trackX + lerpedOffsetMaxX - 5.0, trackY + 4,
+                    2.0, 2.0, 2.0, 2.0, 50.0);
+        }
+ 
+        // name label
+        TextRenderer.drawString(setting.getName(), ctx,
+                parentX() + 6, parentY() + parentOffset() + offset + 9,
+                TEXT_COLOR.getRGB());
+ 
+        // value badge
+        final String val = getDisplayText();
+        final int bw = TextRenderer.getWidth(val) + 10;
+        final int bx = parentX() + parentWidth() - bw - 4;
+        final int by = parentY() + parentOffset() + offset + 6;
+        RenderUtils.renderRoundedQuad(ms, BADGE_BG, bx, by, bx + bw, by + 14, 3.0, 3.0, 3.0, 3.0, 50.0);
+        TextRenderer.drawString(val, ctx, bx + 5, by + 2, accentColor1 != null ? accentColor1.getRGB() : TEXT_COLOR.getRGB());
+ 
+        // thumbs (rendered by ModuleButton's renderSliderKnobs, so just the flat thumbs here as fallback)
+        final float thumbMid = trackY + 2f - 4f;
+        RenderUtils.renderRoundedQuad(ms, THUMB_COLOR,
+                (float)(trackX + lerpedOffsetMinX - 5.0 - 4.0), thumbMid,
+                (float)(trackX + lerpedOffsetMinX - 5.0 + 4.0), thumbMid + 8f,
+                4.0, 4.0, 4.0, 4.0, 50.0);
+        RenderUtils.renderRoundedQuad(ms, THUMB_COLOR,
+                (float)(trackX + lerpedOffsetMaxX - 5.0 - 4.0), thumbMid,
+                (float)(trackX + lerpedOffsetMaxX - 5.0 + 4.0), thumbMid + 8f,
+                4.0, 4.0, 4.0, 4.0, 50.0);
+    }
+ 
+    private void updateAnimations(int mx, int my, float delta) {
+        hoverAnim = (float) MathUtil.exponentialInterpolate(hoverAnim,
+                (isHovered(mx, my) && !parent.parent.dragging) ? 1f : 0f,
+                0.25, delta * 0.05f);
+    }
+ 
+    private String getDisplayText() {
+        if (setting.getCurrentMin() == setting.getCurrentMax())
+            return fmt(setting.getCurrentMin());
+        return fmt(setting.getCurrentMin()) + " - " + fmt(setting.getCurrentMax());
+    }
+ 
+    private String fmt(double v) {
+        final double s = setting.getStep();
+        if (s == 0.1)  return String.format("%.1f", v);
+        if (s == 0.01) return String.format("%.2f", v);
+        if (s == 0.001)return String.format("%.3f", v);
+        if (s >= 1.0)  return String.format("%.0f", v);
+        return String.valueOf(v);
+    }
+ 
+    @Override
+    public void mouseClicked(double mx, double my, int btn) {
+        if (btn == 0 && isHovered(mx, my)) {
+            if      (isHoveredMin(mx, my)) { draggingMin = true; slideMin(mx); }
+            else if (isHoveredMax(mx, my)) { draggingMax = true; slideMax(mx); }
+            else if (mx < parentX() + offsetMinX) { draggingMin = true; slideMin(mx); }
+            else if (mx > parentX() + offsetMaxX) { draggingMax = true; slideMax(mx); }
+            else if (mx - (parentX() + offsetMinX) < (parentX() + offsetMaxX) - mx) { draggingMin = true; slideMin(mx); }
+            else { draggingMax = true; slideMax(mx); }
+        }
+        super.mouseClicked(mx, my, btn);
+    }
+ 
+    @Override
+    public void keyPressed(int key, int scan, int mods) {
+        if (mouseOver && key == 259) {
+            setting.setCurrentMax(setting.getDefaultMax());
+            setting.setCurrentMin(setting.getDefaultMin());
+        }
+        super.keyPressed(key, scan, mods);
+    }
+ 
+    public boolean isHoveredMin(double mx, double my) {
+        return isHovered(mx, my) && mx > parentX() + offsetMinX - 8 && mx < parentX() + offsetMinX + 8;
+    }
+ 
+    public boolean isHoveredMax(double mx, double my) {
+        return isHovered(mx, my) && mx > parentX() + offsetMaxX - 8 && mx < parentX() + offsetMaxX + 8;
+    }
+ 
+    @Override
+    public void mouseReleased(double mx, double my, int btn) {
+        if (btn == 0) { draggingMin = false; draggingMax = false; }
+        super.mouseReleased(mx, my, btn);
+    }
+ 
+    @Override
+    public void mouseDragged(double mx, double my, int btn, double dx, double dy) {
+        if (draggingMin) slideMin(mx);
+        if (draggingMax) slideMax(mx);
+        super.mouseDragged(mx, my, btn, dx, dy);
+    }
+ 
+    @Override
+    public void onGuiClose() {
+        accentColor1 = null;
+        accentColor2 = null;
+        hoverAnim    = 0f;
+        super.onGuiClose();
+    }
+ 
+    private void slideMin(double mx) {
+        setting.setCurrentMin(Math.min(
+                MathUtil.roundToNearest(
+                        MathHelper.clamp((mx - (parentX() + 5)) / (parentWidth() - 10), 0.0, 1.0)
+                                * (setting.getMaxValue() - setting.getMinValue()) + setting.getMinValue(),
+                        setting.getStep()),
+                setting.getCurrentMax()));
+    }
+ 
+    private void slideMax(double mx) {
+        setting.setCurrentMax(Math.max(
+                MathUtil.roundToNearest(
+                        MathHelper.clamp((mx - (parentX() + 5)) / (parentWidth() - 10), 0.0, 1.0)
+                                * (setting.getMaxValue() - setting.getMinValue()) + setting.getMinValue(),
+                        setting.getStep()),
+                setting.getCurrentMin()));
     }
 }
+ 
