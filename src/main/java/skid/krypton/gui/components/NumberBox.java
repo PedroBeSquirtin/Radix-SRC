@@ -1,149 +1,149 @@
 package skid.krypton.gui.components;
-
+ 
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.util.math.MathHelper;
 import skid.krypton.gui.Component;
 import skid.krypton.module.setting.Setting;
 import skid.krypton.module.setting.NumberSetting;
-import skid.krypton.utils.ColorUtil;
-import skid.krypton.utils.Utils;
-import skid.krypton.utils.MathUtil;
-import skid.krypton.utils.RenderUtils;
+import skid.krypton.utils.*;
 import skid.krypton.utils.TextRenderer;
-
+ 
 import java.awt.*;
-
+ 
 public final class NumberBox extends Component {
+ 
+    private static final Color TEXT_COLOR  = new Color(210, 215, 225);
+    private static final Color HOVER_COLOR = new Color(255, 255, 255, 10);
+    private static final Color TRACK_BG    = new Color(42, 48, 60);
+    private static final Color BADGE_BG    = new Color(32, 37, 48, 220);
+ 
     public boolean dragging;
-    public double offsetX;
-    public double lerpedOffsetX;
-    private float hoverAnimation;
+    public double  offsetX;
+    public double  lerpedOffsetX;
+    private float  hoverAnim;
     private final NumberSetting setting;
-    public Color currentColor1;
-    private Color currentAlpha;
-    private final Color TEXT_COLOR;
-    private final Color HOVER_COLOR;
-    private final Color TRACK_BG_COLOR;
-    private final float TRACK_HEIGHT = 4.0f;
-    private final float TRACK_RADIUS = 2.0f;
-    private final float ANIMATION_SPEED = 0.25f;
-
-    public NumberBox(final ModuleButton moduleButton, final Setting setting, final int n) {
-        super(moduleButton, setting, n);
+    public Color   currentColor1;
+ 
+    public NumberBox(ModuleButton parent, Setting setting, int offset) {
+        super(parent, setting, offset);
         this.lerpedOffsetX = 0.0;
-        this.hoverAnimation = 0.0f;
-        this.TEXT_COLOR = new Color(230, 230, 230);
-        this.HOVER_COLOR = new Color(255, 255, 255, 20);
-        this.TRACK_BG_COLOR = new Color(60, 60, 65);
-        this.setting = (NumberSetting) setting;
+        this.hoverAnim     = 0f;
+        this.setting       = (NumberSetting) setting;
     }
-
+ 
     @Override
     public void onUpdate() {
-        final Color mainColor = Utils.getMainColor(255, this.parent.settings.indexOf(this));
-        if (this.currentColor1 == null) {
-            this.currentColor1 = new Color(mainColor.getRed(), mainColor.getGreen(), mainColor.getBlue(), 0);
-        } else {
-            this.currentColor1 = new Color(mainColor.getRed(), mainColor.getGreen(), mainColor.getBlue(), this.currentColor1.getAlpha());
-        }
-        if (this.currentColor1.getAlpha() != 255) {
-            this.currentColor1 = ColorUtil.a(0.05f, 255, this.currentColor1);
-        }
+        final Color mc = Utils.getMainColor(255, parent.settings.indexOf(this));
+        if (currentColor1 == null)
+            currentColor1 = new Color(mc.getRed(), mc.getGreen(), mc.getBlue(), 0);
+        else
+            currentColor1 = new Color(mc.getRed(), mc.getGreen(), mc.getBlue(), currentColor1.getAlpha());
+        if (currentColor1.getAlpha() != 255)
+            currentColor1 = ColorUtil.a(0.05f, 255, currentColor1);
         super.onUpdate();
     }
-
+ 
     @Override
-    public void render(final DrawContext drawContext, final int n, final int n2, final float n3) {
-        super.render(drawContext, n, n2, n3);
-        this.updateAnimations(n, n2, n3);
-        this.offsetX = (this.setting.getValue() - this.setting.getMin()) / (this.setting.getMax() - this.setting.getMin()) * this.parentWidth();
-        this.lerpedOffsetX = MathUtil.approachValue((float) (0.5 * n3), this.lerpedOffsetX, this.offsetX);
-        if (!this.parent.parent.dragging) {
-            drawContext.fill(this.parentX(), this.parentY() + this.parentOffset() + this.offset, this.parentX() + this.parentWidth(), this.parentY() + this.parentOffset() + this.offset + this.parentHeight(), new Color(this.HOVER_COLOR.getRed(), this.HOVER_COLOR.getGreen(), this.HOVER_COLOR.getBlue(), (int) (this.HOVER_COLOR.getAlpha() * this.hoverAnimation)).getRGB());
+    public void render(DrawContext ctx, int mx, int my, float delta) {
+        super.render(ctx, mx, my, delta);
+        updateAnimations(mx, my, delta);
+ 
+        offsetX       = (setting.getValue() - setting.getMin()) / (setting.getMax() - setting.getMin()) * parentWidth();
+        lerpedOffsetX = MathUtil.approachValue((float)(0.5 * delta), lerpedOffsetX, offsetX);
+ 
+        // hover highlight
+        if (!parent.parent.dragging && hoverAnim > 0.01f)
+            ctx.fill(parentX(), parentY() + parentOffset() + offset,
+                    parentX() + parentWidth(), parentY() + parentOffset() + offset + parentHeight(),
+                    new Color(255, 255, 255, (int)(10 * hoverAnim)).getRGB());
+ 
+        final int trackY = parentY() + offset + parentOffset() + 24;
+        final int trackX = parentX() + 6;
+        final int trackW = parentWidth() - 12;
+ 
+        // track background
+        RenderUtils.renderRoundedQuad(ctx.getMatrices(), TRACK_BG,
+                trackX, trackY, trackX + trackW, trackY + 4,
+                2.0, 2.0, 2.0, 2.0, 50.0);
+        // track fill
+        if (lerpedOffsetX > 2.5) {
+            RenderUtils.renderRoundedQuad(ctx.getMatrices(), currentColor1,
+                    trackX, trackY,
+                    trackX + Math.max(lerpedOffsetX - 6.0, 0.0), trackY + 4,
+                    2.0, 2.0, 2.0, 2.0, 50.0);
         }
-        final int n4 = this.parentY() + this.offset + this.parentOffset() + 25;
-        final int n5 = this.parentX() + 5;
-        RenderUtils.renderRoundedQuad(drawContext.getMatrices(), this.TRACK_BG_COLOR, n5, n4, n5 + (this.parentWidth() - 10), n4 + 4.0f, 2.0, 2.0, 2.0, 2.0, 50.0);
-        if (this.lerpedOffsetX > 2.5) {
-            RenderUtils.renderRoundedQuad(drawContext.getMatrices(), this.currentColor1, n5, n4, n5 + Math.max(this.lerpedOffsetX - 5.0, 0.0), n4 + 4.0f, 2.0, 2.0, 2.0, 2.0, 50.0);
-        }
-        final String displayValue = this.getDisplayValue();
-        TextRenderer.drawString(this.setting.getName(), drawContext, this.parentX() + 5, this.parentY() + this.parentOffset() + this.offset + 9, this.TEXT_COLOR.getRGB());
-        TextRenderer.drawString(displayValue, drawContext, this.parentX() + this.parentWidth() - TextRenderer.getWidth(displayValue) - 5, this.parentY() + this.parentOffset() + this.offset + 9, this.currentColor1.getRGB());
+ 
+        // setting name
+        TextRenderer.drawString(setting.getName(), ctx,
+                parentX() + 6,
+                parentY() + parentOffset() + offset + 9,
+                TEXT_COLOR.getRGB());
+ 
+        // value badge (right side, above track)
+        final String val = getDisplayValue();
+        final int bw = TextRenderer.getWidth(val) + 10;
+        final int bx = parentX() + parentWidth() - bw - 4;
+        final int nameY = parentY() + parentOffset() + offset + 6;
+        RenderUtils.renderRoundedQuad(ctx.getMatrices(), BADGE_BG,
+                bx, nameY, bx + bw, nameY + 14,
+                3.0, 3.0, 3.0, 3.0, 50.0);
+        TextRenderer.drawString(val, ctx, bx + 5, nameY + 2, currentColor1.getRGB());
     }
-
-    private void updateAnimations(final int n, final int n2, final float n3) {
-        float n4;
-        if (this.isHovered(n, n2) && !this.parent.parent.dragging) {
-            n4 = 1.0f;
-        } else {
-            n4 = 0.0f;
-        }
-        this.hoverAnimation = (float) MathUtil.exponentialInterpolate(this.hoverAnimation, n4, 0.25, n3 * 0.05f);
+ 
+    private void updateAnimations(int mx, int my, float delta) {
+        hoverAnim = (float) MathUtil.exponentialInterpolate(hoverAnim,
+                (isHovered(mx, my) && !parent.parent.dragging) ? 1f : 0f,
+                0.25, delta * 0.05f);
     }
-
+ 
     private String getDisplayValue() {
-        final double a = this.setting.getValue();
-        final double c = this.setting.getFormat();
-        if (c == 0.1) {
-            return String.format("%.1f", a);
-        }
-        if (c == 0.01) {
-            return String.format("%.2f", a);
-        }
-        if (c == 0.001) {
-            return String.format("%.3f", a);
-        }
-        if (c == 1.0E-4) {
-            return String.format("%.4f", a);
-        }
-        if (c >= 1.0) {
-            return String.format("%.0f", a);
-        }
-        return String.valueOf(a);
+        final double v = setting.getValue();
+        final double f = setting.getFormat();
+        if (f == 0.1)    return String.format("%.1f", v);
+        if (f == 0.01)   return String.format("%.2f", v);
+        if (f == 0.001)  return String.format("%.3f", v);
+        if (f == 1e-4)   return String.format("%.4f", v);
+        if (f >= 1.0)    return String.format("%.0f", v);
+        return String.valueOf(v);
     }
-
+ 
     @Override
     public void onGuiClose() {
-        this.currentColor1 = null;
-        this.hoverAnimation = 0.0f;
+        currentColor1 = null;
+        hoverAnim     = 0f;
         super.onGuiClose();
     }
-
-    private void slide(final double n) {
-        this.setting.getValue(MathUtil.roundToNearest(MathHelper.clamp((n - (this.parentX() + 5)) / (this.parentWidth() - 10), 0.0, 1.0) * (this.setting.getMax() - this.setting.getMin()) + this.setting.getMin(), this.setting.getFormat()));
+ 
+    private void slide(double mx) {
+        setting.getValue(MathUtil.roundToNearest(
+                MathHelper.clamp((mx - (parentX() + 6)) / (parentWidth() - 12), 0.0, 1.0)
+                        * (setting.getMax() - setting.getMin()) + setting.getMin(),
+                setting.getFormat()));
     }
-
+ 
     @Override
-    public void keyPressed(final int n, final int n2, final int n3) {
-        if (this.mouseOver && this.parent.extended && n == 259) {
-            this.setting.getValue(this.setting.getDefaultValue());
-        }
-        super.keyPressed(n, n2, n3);
+    public void keyPressed(int key, int scan, int mods) {
+        if (mouseOver && parent.extended && key == 259)
+            setting.getValue(setting.getDefaultValue());
+        super.keyPressed(key, scan, mods);
     }
-
+ 
     @Override
-    public void mouseClicked(final double n, final double n2, final int n3) {
-        if (this.isHovered(n, n2) && n3 == 0) {
-            this.dragging = true;
-            this.slide(n);
-        }
-        super.mouseClicked(n, n2, n3);
+    public void mouseClicked(double mx, double my, int btn) {
+        if (isHovered(mx, my) && btn == 0) { dragging = true; slide(mx); }
+        super.mouseClicked(mx, my, btn);
     }
-
+ 
     @Override
-    public void mouseReleased(final double n, final double n2, final int n3) {
-        if (this.dragging && n3 == 0) {
-            this.dragging = false;
-        }
-        super.mouseReleased(n, n2, n3);
+    public void mouseReleased(double mx, double my, int btn) {
+        if (btn == 0) dragging = false;
+        super.mouseReleased(mx, my, btn);
     }
-
+ 
     @Override
-    public void mouseDragged(final double n, final double n2, final int n3, final double n4, final double n5) {
-        if (this.dragging) {
-            this.slide(n);
-        }
-        super.mouseDragged(n, n2, n3, n4, n5);
+    public void mouseDragged(double mx, double my, int btn, double dx, double dy) {
+        if (dragging) slide(mx);
+        super.mouseDragged(mx, my, btn, dx, dy);
     }
 }
+ 
