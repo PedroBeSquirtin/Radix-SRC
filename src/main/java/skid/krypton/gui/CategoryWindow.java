@@ -25,9 +25,6 @@ public final class CategoryWindow {
     private static final Color TEXT_DIM    = new Color(110, 118, 135);
     private static final Color DOT_COLOR   = new Color(120, 128, 145);
  
-    // ── category icon glyphs (unicode symbols used as stand-ins) ─────────────
-    private static final String[] ICONS = { "⚔", "☰", "◎", "◈", "❖" };
- 
     // ── layout ────────────────────────────────────────────────────────────────
     public List<ModuleButton> moduleButtons;
     public int x, y;
@@ -113,20 +110,16 @@ public final class CategoryWindow {
                 prevX + 9, prevY + height / 2 + 4,
                 2.0, 2.0, 2.0, 2.0, 50.0);
  
-        // ---- category icon ------------------------------------------------------
-        final String icon = ICONS[Math.min(category.ordinal(), ICONS.length - 1)];
-        TextRenderer.drawString(icon, ctx, prevX + 13, prevY + height / 2 - 6, accent.getRGB());
- 
         // ---- category name ------------------------------------------------------
-        final int iconW = TextRenderer.getWidth(icon);
         TextRenderer.drawString(category.name, ctx,
-                prevX + 13 + iconW + 5,
+                prevX + 14,
                 prevY + height / 2 - 6,
                 TEXT_MAIN.getRGB());
  
-        // ---- three dots (⋯) on the right ----------------------------------------
-        TextRenderer.drawString("...", ctx,
-                prevX + width - 22, prevY + height / 2 - 6,
+        // ---- three dots on the right (plain ASCII, safe for any font) -----------
+        TextRenderer.drawString(". . .", ctx,
+                prevX + width - TextRenderer.getWidth(". . .") - 8,
+                prevY + height / 2 - 6,
                 DOT_COLOR.getRGB());
  
         // ---- module buttons (clipped to expanded area) --------------------------
@@ -235,4 +228,3 @@ public final class CategoryWindow {
         return mx > prevX && mx < prevX + width && my > prevY && my < prevY + height;
     }
 }
- 
