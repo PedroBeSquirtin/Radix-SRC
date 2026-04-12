@@ -56,9 +56,9 @@ public final class ModeBox extends Component {
         // setting name
         TextRenderer.drawString(setting.getName(), ctx, parentX() + 8, labelY, TEXT_COLOR.getRGB());
  
-        // mode value pill (right-aligned)
+        // mode value pill (right-aligned) - using plain ASCII only (font safety)
         final String modeName = setting.getValue().name();
-        final int pillW = TextRenderer.getWidth(modeName) + TextRenderer.getWidth("◄ ") + TextRenderer.getWidth(" ►") + 14;
+        final int pillW = TextRenderer.getWidth(modeName) + TextRenderer.getWidth("< ") + TextRenderer.getWidth(" >") + 14;
         final int pillX = parentX() + parentWidth() - pillW - 6;
         final int pillY = labelY - 3;
  
@@ -69,12 +69,12 @@ public final class ModeBox extends Component {
                 pillX, pillY, pillX + pillW, pillY + 1,
                 0.0, 0.0, 0.0, 0.0, 50.0);
         // left arrow
-        TextRenderer.drawString("◄", ctx, pillX + 4, pillY + 2, ARROW_COLOR.getRGB());
+        TextRenderer.drawString("<", ctx, pillX + 4, pillY + 2, ARROW_COLOR.getRGB());
         // mode name (accent colour)
-        final int nameX = pillX + TextRenderer.getWidth("◄ ") + 6;
+        final int nameX = pillX + TextRenderer.getWidth("< ") + 6;
         TextRenderer.drawString(modeName, ctx, nameX, pillY + 2, currentColor != null ? currentColor.getRGB() : TEXT_COLOR.getRGB());
         // right arrow
-        TextRenderer.drawString("►", ctx, pillX + pillW - TextRenderer.getWidth("►") - 4, pillY + 2, ARROW_COLOR.getRGB());
+        TextRenderer.drawString(">", ctx, pillX + pillW - TextRenderer.getWidth(">") - 4, pillY + 2, ARROW_COLOR.getRGB());
  
         // animated underline selector
         renderSelector(ctx, delta);
@@ -160,4 +160,3 @@ public final class ModeBox extends Component {
         super.onGuiClose();
     }
 }
- 
