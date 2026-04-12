@@ -26,27 +26,22 @@ public final class ModuleButton {
     public Color currentColor;
     public Color currentAlpha;
     public Animation animation;
-    private final float CORNER_RADIUS = 6.0f;
     private final Color ACCENT_COLOR;
     private final Color HOVER_COLOR;
     private final Color ENABLED_COLOR;
     private final Color DISABLED_COLOR;
-    private final Color DESCRIPTION_BG;
     private float hoverAnimation;
     private float enabledAnimation;
-    private final float expandAnimation;
 
     public ModuleButton(final CategoryWindow parent, final Module module, final int offset) {
         this.settings = new ArrayList<>();
         this.animation = new Animation(0.0);
-        this.ACCENT_COLOR = new Color(65, 105, 225);
-        this.HOVER_COLOR = new Color(255, 255, 255, 20);
-        this.ENABLED_COLOR = new Color(120, 190, 255);
-        this.DISABLED_COLOR = new Color(180, 180, 180);
-        this.DESCRIPTION_BG = new Color(40, 40, 40, 200);
+        this.ACCENT_COLOR = new Color(65, 150, 255);
+        this.HOVER_COLOR = new Color(255, 255, 255, 15);
+        this.ENABLED_COLOR = new Color(100, 200, 255);
+        this.DISABLED_COLOR = new Color(180, 180, 190);
         this.hoverAnimation = 0.0f;
         this.enabledAnimation = 0.0f;
-        this.expandAnimation = 0.0f;
         this.parent = parent;
         this.module = module;
         this.offset = offset;
@@ -85,9 +80,10 @@ public final class ModuleButton {
         final int n4 = this.parent.getY() + this.offset;
         final int width = this.parent.getWidth();
         final int height = this.parent.getHeight();
+        
         this.renderButtonBackground(drawContext, x, n4, width, height);
-        this.renderIndicator(drawContext, x, n4, height);
         this.renderModuleInfo(drawContext, x, n4, width, height);
+        
         if (this.extended) {
             this.renderSettings(drawContext, n, n2, n3);
         }
@@ -104,54 +100,47 @@ public final class ModuleButton {
         } else {
             n5 = 0.0f;
         }
-        this.hoverAnimation = (float) MathUtil.exponentialInterpolate(this.hoverAnimation, n5, 0.05000000074505806, n4);
+        this.hoverAnimation = (float) MathUtil.exponentialInterpolate(this.hoverAnimation, n5, 0.05, n4);
         float n6;
         if (this.module.isEnabled()) {
             n6 = 1.0f;
         } else {
             n6 = 0.0f;
         }
-        this.enabledAnimation = (float) MathUtil.exponentialInterpolate(this.enabledAnimation, n6, 0.004999999888241291, n4);
+        this.enabledAnimation = (float) MathUtil.exponentialInterpolate(this.enabledAnimation, n6, 0.005, n4);
         this.enabledAnimation = (float) MathUtil.clampValue(this.enabledAnimation, 0.0, 1.0);
     }
 
     private void renderButtonBackground(final DrawContext drawContext, final int n, final int n2, final int n3, final int n4) {
-        final Color a = ColorUtil.a(new Color(25, 25, 30, 230), this.HOVER_COLOR, this.hoverAnimation);
-        final boolean b = this.parent.moduleButtons.get(this.parent.moduleButtons.size() - 1) == this;
-        if (b && !this.extended) {
-            RenderUtils.renderRoundedQuad(drawContext.getMatrices(), a, n, n2, n + n3, n2 + n4, 0.0, 0.0, 6.0, 6.0, 50.0);
-        } else if (b && this.extended) {
-            RenderUtils.renderRoundedQuad(drawContext.getMatrices(), a, n, n2, n + n3, n2 + n4, 0.0, 0.0, 0.0, 0.0, 50.0);
-        } else {
-            drawContext.fill(n, n2, n + n3, n2 + n4, a.getRGB());
-        }
+        Color bgColor = new Color(22, 26, 32, 230);
+        final Color a = ColorUtil.a(bgColor, this.HOVER_COLOR, this.hoverAnimation);
+        drawContext.fill(n, n2, n + n3, n2 + n4, a.getRGB());
+        
+        // Separator line
         if (this.parent.moduleButtons.indexOf(this) > 0) {
-            drawContext.fill(n + 4, n2, n + n3 - 4, n2 + 1, new Color(60, 60, 65, 100).getRGB());
-        }
-    }
-
-    private void renderIndicator(final DrawContext drawContext, final int n, final int n2, final int n3) {
-        Color color;
-        if (this.module.isEnabled()) {
-            color = Utils.getMainColor(255, Krypton.INSTANCE.getModuleManager().a(this.module.getCategory()).indexOf(this.module));
-        } else {
-            color = this.ACCENT_COLOR;
-        }
-        final float n4 = 5.0f * this.enabledAnimation;
-        if (n4 > 0.1f) {
-            RenderUtils.renderRoundedQuad(drawContext.getMatrices(), ColorUtil.a(this.DISABLED_COLOR, color, this.enabledAnimation), n, n2 + 2, n + n4, n2 + n3 - 2, 1.5, 1.5, 1.5, 1.5, 60.0);
+            drawContext.fill(n + 8, n2, n + n3 - 8, n2 + 1, new Color(40, 44, 50, 150).getRGB());
         }
     }
 
     private void renderModuleInfo(final DrawContext drawContext, final int n, final int n2, final int n3, final int n4) {
-        TextRenderer.drawString(this.module.getName(), drawContext, n + 10, n2 + n4 / 2 - 6, ColorUtil.a(this.DISABLED_COLOR, this.ENABLED_COLOR, this.enabledAnimation).getRGB());
-        final int n5 = n + n3 - 40;
-        final int n6 = n2 + n4 / 2 - 6;
-        RenderUtils.renderRoundedQuad(drawContext.getMatrices(), ColorUtil.a(new Color(60, 60, 65, 200), new Color(65, 105, 225, 100), this.enabledAnimation), n5, n6, n5 + 24.0f, n6 + 12.0f, 6.0, 6.0, 6.0, 6.0, 50.0);
-        final float n7 = n5 + 6.0f + 12.0f * this.enabledAnimation;
-        RenderUtils.renderCircle(drawContext.getMatrices(), ColorUtil.a(new Color(180, 180, 180), this.ENABLED_COLOR, this.enabledAnimation), n7, n6 + 6.0f, 5.0, 12);
-        if (this.module.isEnabled()) {
-            RenderUtils.renderCircle(drawContext.getMatrices(), new Color(this.ENABLED_COLOR.getRed(), this.ENABLED_COLOR.getGreen(), this.ENABLED_COLOR.getBlue(), 30), n7, n6 + 6.0f, 8.0, 16);
+        Color textColor = ColorUtil.a(this.DISABLED_COLOR, this.ENABLED_COLOR, this.enabledAnimation);
+        TextRenderer.drawString(this.module.getName(), drawContext, n + 12, n2 + n4 / 2 - 4, textColor.getRGB());
+        
+        // Settings indicator if module has settings
+        if (!this.module.getSettings().isEmpty()) {
+            String indicator = this.extended ? "▼" : "▶";
+            TextRenderer.drawString(indicator, drawContext, n + n3 - 20, n2 + n4 / 2 - 4, new Color(120, 125, 135).getRGB());
+        }
+        
+        // Bind indicator
+        if (this.module.getKeybind() != -1) {
+            String bindText = KeyUtils.getKey(this.module.getKeybind()).toString();
+            int bindWidth = TextRenderer.getWidth(bindText);
+            RenderUtils.renderRoundedQuad(drawContext.getMatrices(), new Color(35, 40, 48, 200), 
+                n + n3 - bindWidth - 35, n2 + n4 / 2 - 8, 
+                n + n3 - 15, n2 + n4 / 2 + 6, 
+                3.0, 3.0, 3.0, 3.0, 50.0);
+            TextRenderer.drawString(bindText, drawContext, n + n3 - bindWidth - 30, n2 + n4 / 2 - 4, new Color(150, 155, 165).getRGB());
         }
     }
 
@@ -171,10 +160,7 @@ public final class ModuleButton {
         for (final Component next : this.settings) {
             if (next instanceof final NumberBox numberBox) {
                 this.renderModernSliderKnob(drawContext, next.parentX() + Math.max(numberBox.lerpedOffsetX, 2.5), next.parentY() + numberBox.offset + next.parentOffset() + 27.5, numberBox.currentColor1);
-            } else {
-                if (!(next instanceof Slider)) {
-                    continue;
-                }
+            } else if (next instanceof Slider) {
                 this.renderModernSliderKnob(drawContext, next.parentX() + Math.max(((Slider) next).lerpedOffsetMinX, 2.5), next.parentY() + next.offset + next.parentOffset() + 27.5, ((Slider) next).accentColor1);
                 this.renderModernSliderKnob(drawContext, next.parentX() + Math.max(((Slider) next).lerpedOffsetMaxX, 2.5), next.parentY() + next.offset + next.parentOffset() + 27.5, ((Slider) next).accentColor1);
             }
@@ -182,9 +168,9 @@ public final class ModuleButton {
     }
 
     private void renderModernSliderKnob(final DrawContext drawContext, final double n, final double n2, final Color color) {
-        RenderUtils.renderCircle(drawContext.getMatrices(), new Color(0, 0, 0, 100), n, n2, 7.0, 18);
-        RenderUtils.renderCircle(drawContext.getMatrices(), color, n, n2, 5.5, 16);
-        RenderUtils.renderCircle(drawContext.getMatrices(), new Color(255, 255, 255, 70), n, n2 - 1.0, 3.0, 12);
+        RenderUtils.renderCircle(drawContext.getMatrices(), new Color(0, 0, 0, 80), n, n2, 6.0, 16);
+        RenderUtils.renderCircle(drawContext.getMatrices(), color, n, n2, 5.0, 14);
+        RenderUtils.renderCircle(drawContext.getMatrices(), new Color(255, 255, 255, 60), n, n2 - 1.0, 2.5, 10);
     }
 
     public void onExtend() {
@@ -213,12 +199,7 @@ public final class ModuleButton {
     public void mouseClicked(final double n, final double n2, final int button) {
         if (this.isHovered(n, n2)) {
             if (button == 0) {
-                final int n4 = this.parent.getX() + this.parent.getWidth() - 30;
-                final int n5 = this.parent.getY() + this.offset + this.parent.getHeight() / 2 - 3;
-
-                if (n >= n4 && n <= n4 + 12 && n2 >= n5 && n2 <= n5 + 6) {
-                    this.module.toggle();
-                } else if (!this.module.getSettings().isEmpty() && n > this.parent.getX() + this.parent.getWidth() - 25) {
+                if (!this.module.getSettings().isEmpty() && n > this.parent.getX() + this.parent.getWidth() - 25) {
                     if (!this.extended) {
                         this.onExtend();
                     }
@@ -227,13 +208,12 @@ public final class ModuleButton {
                     this.module.toggle();
                 }
             } else if (button == 1) {
-                if (this.module.getSettings().isEmpty()) {
-                    return;
+                if (!this.module.getSettings().isEmpty()) {
+                    if (!this.extended) {
+                        this.onExtend();
+                    }
+                    this.extended = !this.extended;
                 }
-                if (!this.extended) {
-                    this.onExtend();
-                }
-                this.extended = !this.extended;
             }
         }
         if (this.extended) {
@@ -268,8 +248,6 @@ public final class ModuleButton {
     }
 
     public boolean isHovered(final double n, final double n2) {
-        //if (module.getName().equals("Self Destruct"))
-        //    System.out.println(module.getName() + ": " + (n > parent.getX()) + " && " + (n < parent.getX() + parent.getWidth()) + " && " + (n2 > parent.getY() + offset) + " && " + (n2 < parent.getY() + offset + parent.getHeight()));
         return n > this.parent.getX() && n < this.parent.getX() + this.parent.getWidth() && n2 > this.parent.getY() + this.offset && n2 < this.parent.getY() + this.offset + this.parent.getHeight();
     }
 }
