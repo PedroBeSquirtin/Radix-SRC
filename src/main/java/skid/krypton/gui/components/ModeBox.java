@@ -1,172 +1,163 @@
 package skid.krypton.gui.components;
-
+ 
 import net.minecraft.client.gui.DrawContext;
 import skid.krypton.gui.Component;
 import skid.krypton.module.setting.Setting;
 import skid.krypton.module.setting.ModeSetting;
-import skid.krypton.utils.ColorUtil;
-import skid.krypton.utils.Utils;
-import skid.krypton.utils.MathUtil;
-import skid.krypton.utils.RenderUtils;
+import skid.krypton.utils.*;
 import skid.krypton.utils.TextRenderer;
-
+ 
 import java.awt.*;
-
+ 
 public final class ModeBox extends Component {
+ 
+    private static final Color TEXT_COLOR  = new Color(210, 215, 225);
+    private static final Color HOVER_COLOR = new Color(255, 255, 255, 10);
+    private static final Color PILL_BG     = new Color(32, 37, 48, 230);
+    private static final Color PILL_BORDER = new Color(55, 62, 78);
+    private static final Color ARROW_COLOR = new Color(130, 138, 155);
+ 
     private final ModeSetting<?> setting;
-    private float hoverAnimation;
-    private float selectAnimation;
-    private float previousSelectAnimation;
+    private float hoverAnim;
+    private float selectAnim, prevSelectAnim;
     private boolean wasClicked;
     public Color currentColor;
-    private final Color TEXT_COLOR;
-    private final Color HOVER_COLOR;
-    private final Color SELECTOR_BG;
-    private final float SELECTOR_HEIGHT = 4.0f;
-    private final float SELECTOR_RADIUS = 2.0f;
-    private final float HOVER_ANIMATION_SPEED = 0.25f;
-    private final float SELECT_ANIMATION_SPEED = 0.15f;
-
-    public ModeBox(final ModuleButton moduleButton, final Setting setting, final int n) {
-        super(moduleButton, setting, n);
-        this.hoverAnimation = 0.0f;
-        this.selectAnimation = 0.0f;
-        this.previousSelectAnimation = 0.0f;
-        this.wasClicked = false;
-        this.TEXT_COLOR = new Color(230, 230, 230);
-        this.HOVER_COLOR = new Color(255, 255, 255, 20);
-        this.SELECTOR_BG = new Color(40, 40, 45);
-        this.setting = (ModeSetting) setting;
+ 
+    public ModeBox(ModuleButton parent, Setting setting, int offset) {
+        super(parent, setting, offset);
+        this.setting = (ModeSetting<?>)setting;
     }
-
+ 
     @Override
     public void onUpdate() {
-        final Color mainColor = Utils.getMainColor(255, this.parent.settings.indexOf(this));
-        if (this.currentColor == null) {
-            this.currentColor = new Color(mainColor.getRed(), mainColor.getGreen(), mainColor.getBlue(), 0);
-        } else {
-            this.currentColor = new Color(mainColor.getRed(), mainColor.getGreen(), mainColor.getBlue(), this.currentColor.getAlpha());
-        }
-        if (this.currentColor.getAlpha() != 255) {
-            this.currentColor = ColorUtil.a(0.05f, 255, this.currentColor);
-        }
+        final Color mc = Utils.getMainColor(255, parent.settings.indexOf(this));
+        if (currentColor == null)
+            currentColor = new Color(mc.getRed(), mc.getGreen(), mc.getBlue(), 0);
+        else
+            currentColor = new Color(mc.getRed(), mc.getGreen(), mc.getBlue(), currentColor.getAlpha());
+        if (currentColor.getAlpha() != 255)
+            currentColor = ColorUtil.a(0.05f, 255, currentColor);
         super.onUpdate();
     }
-
+ 
     @Override
-    public void render(final DrawContext drawContext, final int n, final int n2, final float n3) {
-        super.render(drawContext, n, n2, n3);
-        this.updateAnimations(n, n2, n3);
-        final int index = this.setting.getPossibleValues().indexOf(this.setting.getValue());
-        final int size = this.setting.getPossibleValues().size();
-        this.parentWidth();
-        this.parentX();
-        if (!this.parent.parent.dragging) {
-            drawContext.fill(this.parentX(), this.parentY() + this.parentOffset() + this.offset, this.parentX() + this.parentWidth(), this.parentY() + this.parentOffset() + this.offset + this.parentHeight(), new Color(this.HOVER_COLOR.getRed(), this.HOVER_COLOR.getGreen(), this.HOVER_COLOR.getBlue(), (int) (this.HOVER_COLOR.getAlpha() * this.hoverAnimation)).getRGB());
-        }
-        TextRenderer.drawString(String.valueOf(this.setting.getName()), drawContext, this.parentX() + 5, this.parentY() + this.parentOffset() + this.offset + 9, this.TEXT_COLOR.getRGB());
-        TextRenderer.drawString(this.setting.getValue().name(), drawContext, this.parentX() + TextRenderer.getWidth(this.setting.getName() + ": ") + 8, this.parentY() + this.parentOffset() + this.offset + 9, this.currentColor.getRGB());
-        final int n4 = this.parentY() + this.offset + this.parentOffset() + 25;
-        final int n5 = this.parentX() + 5;
-        final int n6 = this.parentWidth() - 10;
-        RenderUtils.renderRoundedQuad(drawContext.getMatrices(), this.SELECTOR_BG, n5, n4, n5 + n6, n4 + 4.0f, 2.0, 2.0, 2.0, 2.0, 50.0);
-        final int n7 = index - 1;
-        float n8 = (float) n7;
-        if (n7 < 0.0f) {
-            n8 = (float) (size - 1);
-        }
-        final int n9 = index + 1;
-        float n10 = (float) n9;
-        if (n9 >= (float) size) {
-            n10 = 0.0f;
-        }
-        final int n11 = n6 / size;
-        float n12;
-        if (this.previousSelectAnimation > 0.01f) {
-            n12 = (float) MathUtil.linearInterpolate(n5 + n8 * n11, n5 + index * (float) n11, 1.0f - this.previousSelectAnimation);
-        } else if (this.selectAnimation > 0.01f) {
-            n12 = (float) MathUtil.linearInterpolate(n5 + index * (float) n11, n5 + n10 * n11, this.selectAnimation);
-        } else {
-            n12 = n5 + index * (float) n11;
-        }
-        RenderUtils.renderRoundedQuad(drawContext.getMatrices(), this.currentColor, n12, n4, n12 + n11, n4 + 4.0f, 2.0, 2.0, 2.0, 2.0, 50.0);
-        final int n13 = this.parentY() + this.parentOffset() + this.offset + 9;
-        final int parentX = this.parentX();
-        final int parentX2 = this.parentX();
-        final int parentWidth = this.parentWidth();
-        TextRenderer.drawString("\u25c4", drawContext, parentX + this.parentWidth() - 25, n13, this.TEXT_COLOR.getRGB());
-        TextRenderer.drawString("\u25ba", drawContext, parentX2 + parentWidth - 12, n13, this.TEXT_COLOR.getRGB());
-        if (this.wasClicked) {
-            this.wasClicked = false;
-            this.previousSelectAnimation = 0.0f;
-            this.selectAnimation = 0.01f;
+    public void render(DrawContext ctx, int mx, int my, float delta) {
+        super.render(ctx, mx, my, delta);
+        updateAnimations(mx, my, delta);
+ 
+        // hover highlight
+        if (!parent.parent.dragging && hoverAnim > 0.01f)
+            ctx.fill(parentX(), parentY() + parentOffset() + offset,
+                    parentX() + parentWidth(), parentY() + parentOffset() + offset + parentHeight(),
+                    new Color(255, 255, 255, (int)(10 * hoverAnim)).getRGB());
+ 
+        final int labelY = parentY() + parentOffset() + offset + parentHeight() / 2 - 5;
+ 
+        // setting name
+        TextRenderer.drawString(setting.getName(), ctx, parentX() + 8, labelY, TEXT_COLOR.getRGB());
+ 
+        // mode value pill (right-aligned)
+        final String modeName = setting.getValue().name();
+        final int pillW = TextRenderer.getWidth(modeName) + TextRenderer.getWidth("◄ ") + TextRenderer.getWidth(" ►") + 14;
+        final int pillX = parentX() + parentWidth() - pillW - 6;
+        final int pillY = labelY - 3;
+ 
+        RenderUtils.renderRoundedQuad(ctx.getMatrices(), PILL_BG,
+                pillX, pillY, pillX + pillW, pillY + 16,
+                4.0, 4.0, 4.0, 4.0, 50.0);
+        RenderUtils.renderRoundedQuad(ctx.getMatrices(), PILL_BORDER,
+                pillX, pillY, pillX + pillW, pillY + 1,
+                0.0, 0.0, 0.0, 0.0, 50.0);
+        // left arrow
+        TextRenderer.drawString("◄", ctx, pillX + 4, pillY + 2, ARROW_COLOR.getRGB());
+        // mode name (accent colour)
+        final int nameX = pillX + TextRenderer.getWidth("◄ ") + 6;
+        TextRenderer.drawString(modeName, ctx, nameX, pillY + 2, currentColor != null ? currentColor.getRGB() : TEXT_COLOR.getRGB());
+        // right arrow
+        TextRenderer.drawString("►", ctx, pillX + pillW - TextRenderer.getWidth("►") - 4, pillY + 2, ARROW_COLOR.getRGB());
+ 
+        // animated underline selector
+        renderSelector(ctx, delta);
+ 
+        if (wasClicked) {
+            wasClicked    = false;
+            prevSelectAnim = 0f;
+            selectAnim    = 0.01f;
         }
     }
-
-    private void updateAnimations(final int n, final int n2, final float n3) {
-        final float n4 = n3 * 0.05f;
-        float n5;
-        if (this.isHovered(n, n2) && !this.parent.parent.dragging) {
-            n5 = 1.0f;
-        } else {
-            n5 = 0.0f;
-        }
-        this.hoverAnimation = (float) MathUtil.exponentialInterpolate(this.hoverAnimation, n5, 0.25, n4);
-        if (this.selectAnimation > 0.01f) {
-            this.selectAnimation = (float) MathUtil.exponentialInterpolate(this.selectAnimation, 0.0, 0.15000000596046448, n4);
-            if (this.selectAnimation < 0.01f) {
-                this.previousSelectAnimation = 0.99f;
-            }
-        }
-        if (this.previousSelectAnimation > 0.01f) {
-            this.previousSelectAnimation = (float) MathUtil.exponentialInterpolate(this.previousSelectAnimation, 0.0, 0.15000000596046448, n4);
+ 
+    private void renderSelector(DrawContext ctx, float delta) {
+        final int size = setting.getPossibleValues().size();
+        if (size < 2) return;
+ 
+        final int index  = setting.getPossibleValues().indexOf(setting.getValue());
+        final int trackX = parentX() + 6;
+        final int trackW = parentWidth() - 12;
+        final int trackY = parentY() + parentOffset() + offset + parentHeight() - 5;
+        final int segW   = trackW / size;
+ 
+        // track bg
+        RenderUtils.renderRoundedQuad(ctx.getMatrices(), new Color(42, 48, 60),
+                trackX, trackY, trackX + trackW, trackY + 3,
+                1.5, 1.5, 1.5, 1.5, 50.0);
+ 
+        // animated segment
+        final int prevIdx  = (index - 1 + size) % size;
+        final int nextIdx  = (index + 1) % size;
+        float segX;
+        if (prevSelectAnim > 0.01f)
+            segX = (float) MathUtil.linearInterpolate(trackX + prevIdx * segW, trackX + index * segW, 1f - prevSelectAnim);
+        else if (selectAnim > 0.01f)
+            segX = (float) MathUtil.linearInterpolate(trackX + index * segW, trackX + nextIdx * segW, selectAnim);
+        else
+            segX = trackX + index * segW;
+ 
+        if (currentColor != null) {
+            RenderUtils.renderRoundedQuad(ctx.getMatrices(), currentColor,
+                    segX, trackY, segX + segW, trackY + 3,
+                    1.5, 1.5, 1.5, 1.5, 50.0);
         }
     }
-
+ 
+    private void updateAnimations(int mx, int my, float delta) {
+        final float dt = delta * 0.05f;
+        hoverAnim   = (float) MathUtil.exponentialInterpolate(hoverAnim,
+                (isHovered(mx, my) && !parent.parent.dragging) ? 1f : 0f, 0.25, dt);
+        if (selectAnim > 0.01f) {
+            selectAnim = (float) MathUtil.exponentialInterpolate(selectAnim, 0.0, 0.15, dt);
+            if (selectAnim < 0.01f) prevSelectAnim = 0.99f;
+        }
+        if (prevSelectAnim > 0.01f)
+            prevSelectAnim = (float) MathUtil.exponentialInterpolate(prevSelectAnim, 0.0, 0.15, dt);
+    }
+ 
     @Override
-    public void keyPressed(final int n, final int n2, final int n3) {
-        if (this.mouseOver && this.parent.extended) {
-            if (n == 259) {
-                this.setting.setModeIndex(this.setting.getOriginalValue());
-            } else if (n == 262) {
-                this.cycleModeForward();
-            } else if (n == 263) {
-                this.cycleModeBackward();
-            }
+    public void keyPressed(int key, int scan, int mods) {
+        if (mouseOver && parent.extended) {
+            if      (key == 259) setting.setModeIndex(setting.getOriginalValue());
+            else if (key == 262) { setting.cycleUp();   wasClicked = true; }
+            else if (key == 263) { setting.cycleDown(); wasClicked = true; }
         }
-        super.keyPressed(n, n2, n3);
+        super.keyPressed(key, scan, mods);
     }
-
-    private void cycleModeForward() {
-        this.setting.cycleUp();
-        this.wasClicked = true;
-    }
-
-    private void cycleModeBackward() {
-        this.setting.cycleDown();
-        this.wasClicked = true;
-    }
-
+ 
     @Override
-    public void mouseClicked(final double n, final double n2, final int n3) {
-        if (this.isHovered(n, n2)) {
-            if (n3 == 0) {
-                this.cycleModeForward();
-            } else if (n3 == 1) {
-                this.cycleModeBackward();
-            } else if (n3 == 2) {
-                this.setting.setModeIndex(this.setting.getOriginalValue());
-            }
+    public void mouseClicked(double mx, double my, int btn) {
+        if (isHovered(mx, my)) {
+            if      (btn == 0) { setting.cycleUp();                              wasClicked = true; }
+            else if (btn == 1) { setting.cycleDown();                            wasClicked = true; }
+            else if (btn == 2)   setting.setModeIndex(setting.getOriginalValue());
         }
-        super.mouseClicked(n, n2, n3);
+        super.mouseClicked(mx, my, btn);
     }
-
+ 
     @Override
     public void onGuiClose() {
-        this.currentColor = null;
-        this.hoverAnimation = 0.0f;
-        this.selectAnimation = 0.0f;
-        this.previousSelectAnimation = 0.0f;
+        currentColor    = null;
+        hoverAnim       = 0f;
+        selectAnim      = 0f;
+        prevSelectAnim  = 0f;
         super.onGuiClose();
     }
 }
+ 
